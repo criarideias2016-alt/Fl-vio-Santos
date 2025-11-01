@@ -1,0 +1,7 @@
+{
+  "name": "Analisador de Perfil de Empresa",
+  "description": "Um aplicativo que analisa o perfil de uma empresa no Google Maps e sugere melhorias para otimizar sua presença online.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
