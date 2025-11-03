@@ -1,11 +1,18 @@
 import { GoogleGenAI, Type } from '@google/genai';
-import type { AnalysisResult, CompetitiveAnalysis, DetailedScorecardResult, GroundingChunk, IdeasResult, KeywordsResult, LocalRankingResult, RadiusAnalysisResult, ResponsesResult, SeoActionsResult, UserLocation, ScorecardMetric } from '../types';
+import type { AnalysisResult, CompetitiveAnalysis, DetailedScorecardResult, GroundingChunk, HeadToHeadAnalysis, IdeasResult, KeywordsResult, LocalRankingResult, OptimizationBenefits, RadiusAnalysisResult, ResponsesResult, SeoActionsResult, ScorecardMetric, CustomerProfile, SentimentAnalysis, KeywordVolumeResult } from '../types';
+import { getPrompt, PROMPT_KEYS } from './promptManager';
 
 if (!process.env.API_KEY) {
   throw new Error("API_KEY environment variable not set");
 }
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+const fillPromptTemplate = (template: string, variables: Record<string, string | number>): string => {
+  return template.replace(/\{\{(\w+)\}\}/g, (match, variableName) => {
+    return variables[variableName]?.toString() || match;
+  });
+};
 
 const parseJsonResponse = <T>(jsonText: string, context: string): T => {
   let cleanedText = jsonText.trim();
@@ -25,27 +32,18 @@ const parseJsonResponse = <T>(jsonText: string, context: string): T => {
 
 export async function fetchBusinessInfo(
   businessName: string,
-  userLocation: UserLocation | null
+  city: string,
+  state: string
 ): Promise<{ businessData: string; groundingChunks: GroundingChunk[] }> {
   const model = 'gemini-2.5-flash';
-  
-  const toolConfig = userLocation 
-    ? {
-        retrievalConfig: {
-          latLng: {
-            latitude: userLocation.latitude,
-            longitude: userLocation.longitude,
-          },
-        },
-      }
-    : undefined;
+  const prompt = getPrompt(PROMPT_KEYS.FETCH_BUSINESS_INFO);
+  const contents = fillPromptTemplate(prompt.contents, { businessName, city, state });
 
   const response = await ai.models.generateContent({
     model,
-    contents: `Forneça um resumo detalhado do perfil da empresa "${businessName}" no Google Maps. Inclua o nome, endereço, categoria, horário de funcionamento, resumo das avaliações recentes (positivas e negativas), se há postagens recentes, se tem fotos 360, e um resumo geral das informações disponíveis.`,
+    contents,
     config: {
       tools: [{ googleMaps: {} }],
-      ...(toolConfig && { toolConfig }),
     },
   });
 
@@ -61,12 +59,15 @@ export async function fetchBusinessInfo(
 
 export async function getImprovementSuggestions(businessData: string): Promise<AnalysisResult> {
   const model = 'gemini-2.5-pro';
-  
+  const prompt = getPrompt(PROMPT_KEYS.GET_IMPROVEMENT_SUGGESTIONS);
+  const systemInstruction = prompt.systemInstruction;
+  const contents = fillPromptTemplate(prompt.contents, { businessData });
+
   const response = await ai.models.generateContent({
     model,
-    contents: `Analise as seguintes informações do perfil de uma empresa no Google Meu Negócio e forneça 3 a 5 sugestões acionáveis para melhorá-lo. As informações são: ${businessData}`,
+    contents,
     config: {
-      systemInstruction: `Você é um especialista em otimização do Google Meu Negócio. Seu objetivo é fornecer sugestões claras e práticas. Para cada sugestão, forneça um título, uma descrição e uma categoria. As categorias válidas são: 'Informações', 'Fotos', 'Avaliações', 'Postagens', 'SEO Local'. Formate sua resposta estritamente como o JSON definido no schema.`,
+      systemInstruction,
       responseMimeType: 'application/json',
       responseSchema: {
         type: Type.OBJECT,
@@ -103,28 +104,20 @@ export async function getImprovementSuggestions(businessData: string): Promise<A
 
 export async function getCompetitorAnalysis(
   businessName: string,
-  userLocation: UserLocation | null
+  city: string,
+  state: string
 ): Promise<CompetitiveAnalysis> {
   const model = 'gemini-2.5-pro';
-
-  const toolConfig = userLocation
-    ? {
-      retrievalConfig: {
-        latLng: {
-          latitude: userLocation.latitude,
-          longitude: userLocation.longitude,
-        },
-      },
-    }
-    : undefined;
-
+  const prompt = getPrompt(PROMPT_KEYS.GET_COMPETITOR_ANALYSIS);
+  const systemInstruction = prompt.systemInstruction;
+  const contents = fillPromptTemplate(prompt.contents, { businessName, city, state });
+  
   const response = await ai.models.generateContent({
     model,
-    contents: `Analise a empresa "${businessName}" e 5 de seus concorrentes diretos em um raio de 2km. Para cada uma das 6 empresas (a principal e 5 concorrentes), forneça: o nome exato, a avaliação média, o número total de avaliações, e uma "pontuação de visibilidade" de 0 a 100. A pontuação deve estimar qual delas o Google "entrega mais" aos usuários, considerando a quantidade e qualidade das avaliações, popularidade e completude do perfil. Inclua uma breve justificativa para a pontuação de cada empresa. Ordene a lista da maior para a menor pontuação de visibilidade.`,
+    contents,
     config: {
-      systemInstruction: `Você é um analista de SEO local. Sua tarefa é realizar uma análise competitiva usando o Google Maps. Sua resposta DEVE SER um objeto JSON VÁLIDO e NADA MAIS. O JSON deve ter uma chave 'analysis' que é um array de objetos. Cada objeto no array deve ter as seguintes chaves: 'name' (string), 'rating' (number), 'reviews' (integer), 'visibilityScore' (integer from 0-100), e 'justification' (string). Não inclua nenhum texto, explicação ou formatação de markdown como \`\`\`json antes ou depois do objeto JSON.`,
+      systemInstruction,
       tools: [{ googleMaps: {} }],
-      ...(toolConfig && { toolConfig }),
     },
   });
 
@@ -133,11 +126,15 @@ export async function getCompetitorAnalysis(
 
 export async function getLocalRanking(businessData: string): Promise<LocalRankingResult> {
     const model = 'gemini-2.5-pro';
+    const prompt = getPrompt(PROMPT_KEYS.GET_LOCAL_RANKING);
+    const systemInstruction = prompt.systemInstruction;
+    const contents = fillPromptTemplate(prompt.contents, { businessData });
+    
     const response = await ai.models.generateContent({
         model,
-        contents: `Com base nos dados detalhados de uma empresa (${businessData}), analise seu provável ranqueamento local na cidade em comparação com concorrentes do mesmo segmento. Forneça uma tier de ranqueamento (ex: "Top 3", "Top 10", "Boa Visibilidade") e uma justificativa detalhada sobre os fatores que influenciam essa posição.`,
+        contents,
         config: {
-            systemInstruction: `Você é um analista de SEO Local. Sua resposta DEVE SER um objeto JSON VÁLIDO e NADA MAIS. O JSON deve ter uma chave 'ranking' (string com o tier) e 'justification' (string com a análise).`,
+            systemInstruction,
             responseMimeType: 'application/json',
             responseSchema: {
                 type: Type.OBJECT,
@@ -154,11 +151,15 @@ export async function getLocalRanking(businessData: string): Promise<LocalRankin
 
 export async function getKeywordSuggestions(businessData: string): Promise<KeywordsResult> {
     const model = 'gemini-2.5-pro';
+    const prompt = getPrompt(PROMPT_KEYS.GET_KEYWORD_SUGGESTIONS);
+    const systemInstruction = prompt.systemInstruction;
+    const contents = fillPromptTemplate(prompt.contents, { businessData });
+
     const response = await ai.models.generateContent({
         model,
-        contents: `Com base nos dados da empresa a seguir, gere uma lista de palavras-chave para SEO local. Dados: ${businessData}`,
+        contents,
         config: {
-            systemInstruction: `Você é um especialista em SEO. Crie 3 listas de palavras-chave: 'principais' (termos gerais), 'caudaLonga' (termos específicos e com maior intenção de compra), e 'locais' (incluindo bairros ou pontos de referência próximos). Forneça 5-7 palavras-chave para cada lista. Formate a resposta como um objeto JSON com as chaves 'principais', 'caudaLonga', e 'locais', cada uma contendo um array de strings.`,
+            systemInstruction,
             responseMimeType: 'application/json',
             responseSchema: {
                 type: Type.OBJECT,
@@ -176,11 +177,15 @@ export async function getKeywordSuggestions(businessData: string): Promise<Keywo
 
 export async function getResponseTemplates(businessData: string): Promise<ResponsesResult> {
     const model = 'gemini-2.5-flash';
+    const prompt = getPrompt(PROMPT_KEYS.GET_RESPONSE_TEMPLATES);
+    const systemInstruction = prompt.systemInstruction;
+    const contents = fillPromptTemplate(prompt.contents, { businessData });
+
     const response = await ai.models.generateContent({
         model,
-        contents: `Crie modelos de resposta para avaliações do Google para a empresa com os seguintes dados: ${businessData}`,
+        contents,
         config: {
-            systemInstruction: `Você é um especialista em atendimento ao cliente. Crie 2-3 modelos para avaliações positivas e 2-3 para negativas. Os modelos devem ser profissionais, agradecendo o feedback e, quando apropriado, mencionando sutilmente os serviços ou produtos. Formate a resposta como um objeto JSON com chaves 'positive' e 'negative', cada uma contendo um array de objetos com 'title' e 'text'.`,
+            systemInstruction,
             responseMimeType: 'application/json',
             responseSchema: {
                 type: Type.OBJECT,
@@ -197,11 +202,15 @@ export async function getResponseTemplates(businessData: string): Promise<Respon
 
 export async function getSeoActions(businessData: string): Promise<SeoActionsResult> {
     const model = 'gemini-2.5-pro';
+    const prompt = getPrompt(PROMPT_KEYS.GET_SEO_ACTIONS);
+    const systemInstruction = prompt.systemInstruction;
+    const contents = fillPromptTemplate(prompt.contents, { businessData });
+
     const response = await ai.models.generateContent({
         model,
-        contents: `Com base nos dados da empresa (${businessData}), sugira 5 ações de SEO local para melhorar o posicionamento.`,
+        contents,
         config: {
-            systemInstruction: `Você é um estrategista de SEO Local. Forneça 5 ações concretas e priorizadas (prioridade 'Alta', 'Média' ou 'Baixa'). As ações devem ir além do básico, focando em como superar concorrentes em geral. Inclua otimização da descrição, estratégia de Google Posts, consistência NAP e ideias para backlinks locais. Formate como um JSON com a chave 'actions', um array de objetos com 'title', 'description' e 'priority'.`,
+            systemInstruction,
             responseMimeType: 'application/json',
             responseSchema: {
                 type: Type.OBJECT,
@@ -226,17 +235,18 @@ export async function getSeoActions(businessData: string): Promise<SeoActionsRes
     return parseJsonResponse<SeoActionsResult>(response.text, "ações de SEO");
 }
 
-export async function getRadiusAnalysis(businessData: string, userLocation: UserLocation | null): Promise<RadiusAnalysisResult> {
+export async function getRadiusAnalysis(businessData: string): Promise<RadiusAnalysisResult> {
     const model = 'gemini-2.5-pro';
-    const toolConfig = userLocation ? { retrievalConfig: { latLng: { latitude: userLocation.latitude, longitude: userLocation.longitude } } } : undefined;
-
+    const prompt = getPrompt(PROMPT_KEYS.GET_RADIUS_ANALYSIS);
+    const systemInstruction = prompt.systemInstruction;
+    const contents = fillPromptTemplate(prompt.contents, { businessData });
+    
     const response = await ai.models.generateContent({
         model,
-        contents: `Analise a provável área de alcance de busca para o segmento da empresa com os dados: ${businessData}. Identifique os 5 a 7 bairros mais relevantes em um raio de 10km que demonstram o maior interesse de busca pelo segmento desta empresa. Para cada bairro, forneça uma pontuação percentual de "interesse de busca" (0-100). Forneça também um resumo de análise explicando a distribuição de interesse.`,
+        contents,
         config: {
-            systemInstruction: `Você é um analista de dados geoespaciais. Sua tarefa é usar o Google Maps para analisar o interesse de busca por bairro. Sua resposta DEVE SER um objeto JSON VÁLIDO e NADA MAIS. O JSON deve ter uma chave 'neighborhoods', que é um array de objetos, cada um com 'name' (string) e 'interestScore' (integer 0-100). Ele também deve ter uma chave 'analysisSummary' (string) com sua análise. Ordene os bairros do maior para o menor 'interestScore'.`,
+            systemInstruction,
             tools: [{ googleMaps: {} }],
-            ...(toolConfig && { toolConfig }),
         }
     });
     return parseJsonResponse<RadiusAnalysisResult>(response.text, "análise de raio");
@@ -244,11 +254,15 @@ export async function getRadiusAnalysis(businessData: string, userLocation: User
 
 export async function getIdeaSuggestions(businessData: string): Promise<IdeasResult> {
     const model = 'gemini-2.5-pro';
+    const prompt = getPrompt(PROMPT_KEYS.GET_IDEA_SUGGESTIONS);
+    const systemInstruction = prompt.systemInstruction;
+    const contents = fillPromptTemplate(prompt.contents, { businessData });
+
     const response = await ai.models.generateContent({
         model,
-        contents: `Gere ideias criativas de marketing para a empresa com base nestes dados: ${businessData}. Crie 3 ideias para Google Posts, 2 para promoções locais e 1 para eventos. Crucialmente, inclua uma seção separada explicando de forma convincente por que fotos 360 são essenciais para aumentar a autoridade e confiança no perfil.`,
+        contents,
         config: {
-            systemInstruction: `Você é um consultor de marketing criativo. Sua resposta deve ser um JSON. Deve ter uma chave 'ideas', um array de objetos com 'title', 'description' e 'category' ('Postagens', 'Promoções', 'Eventos'). Deve também ter uma chave 'photo360', um objeto com 'title' e 'description' detalhando os benefícios das fotos 360.`,
+            systemInstruction,
             responseMimeType: 'application/json',
             responseSchema: {
                 type: Type.OBJECT,
@@ -302,17 +316,21 @@ const METRIC_DESCRIPTIONS: { [key: string]: string } = {
 export async function getDetailedScorecard(businessData: string): Promise<DetailedScorecardResult> {
     const model = 'gemini-2.5-pro';
     
-    // Type for the AI's response, without the static description
     type AiScorecardMetric = Omit<ScorecardMetric, 'description'>;
     interface AiDetailedScorecardResult {
       metrics: AiScorecardMetric[];
     }
+    
+    const prompt = getPrompt(PROMPT_KEYS.GET_DETAILED_SCORECARD);
+    const metricKeys = Object.keys(METRIC_DESCRIPTIONS).join('", "');
+    const systemInstruction = fillPromptTemplate(prompt.systemInstruction, { metricKeys });
+    const contents = fillPromptTemplate(prompt.contents, { businessData });
 
     const response = await ai.models.generateContent({
         model,
-        contents: `Com base nos dados da empresa (${businessData}), avalie o perfil contra a lista de métricas de SEO Local a seguir. Para cada métrica, forneça um score de 0 a 100, um status ('Fraco', 'Razoável', 'Bom') e uma análise textual específica para a empresa.`,
+        contents,
         config: {
-            systemInstruction: `Você é um especialista em SEO Local que cria um scorecard detalhado. Sua resposta DEVE ser um objeto JSON. O JSON deve ter uma chave 'metrics' que é um array de objetos. Cada objeto deve ter as chaves: 'name' (string, o nome da métrica), 'analysis' (string, a sua análise específica sobre a empresa), 'status' (string, um dos três: 'Fraco', 'Razoável', 'Bom'), e 'score' (integer, 0-100). Avalie TODAS as métricas listadas a seguir: "${Object.keys(METRIC_DESCRIPTIONS).join('", "')}".`,
+            systemInstruction,
             responseMimeType: 'application/json',
             responseSchema: {
                 type: Type.OBJECT,
@@ -338,11 +356,206 @@ export async function getDetailedScorecard(businessData: string): Promise<Detail
 
     const aiResult = parseJsonResponse<AiDetailedScorecardResult>(response.text, "scorecard detalhado");
 
-    // Augment the result with static descriptions
     const augmentedMetrics = aiResult.metrics.map(metric => ({
         ...metric,
         description: METRIC_DESCRIPTIONS[metric.name] || "Descrição não disponível."
     }));
 
     return { metrics: augmentedMetrics };
+}
+
+export async function getOptimizationBenefits(): Promise<OptimizationBenefits> {
+    const model = 'gemini-2.5-flash';
+    const prompt = getPrompt(PROMPT_KEYS.GET_OPTIMIZATION_BENEFITS);
+    const systemInstruction = prompt.systemInstruction;
+    const contents = prompt.contents;
+
+    const response = await ai.models.generateContent({
+        model,
+        contents,
+        config: {
+            systemInstruction,
+            responseMimeType: 'application/json',
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    benefits: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                title: { type: Type.STRING },
+                                description: { type: Type.STRING },
+                                icon: { type: Type.STRING, description: 'Nome do ícone do Heroicons (outline), ex: chart-bar' }
+                            },
+                            required: ['title', 'description', 'icon']
+                        }
+                    }
+                },
+                required: ['benefits']
+            }
+        }
+    });
+
+    return parseJsonResponse<OptimizationBenefits>(response.text, "benefícios da otimização");
+}
+
+
+export async function getHeadToHeadAnalysis(businessData: string, competitorName: string): Promise<HeadToHeadAnalysis> {
+    const model = 'gemini-2.5-pro';
+    const prompt = getPrompt(PROMPT_KEYS.GET_HEAD_TO_HEAD_ANALYSIS);
+    const systemInstruction = prompt.systemInstruction;
+    const contents = fillPromptTemplate(prompt.contents, { businessData, competitorName });
+
+    const response = await ai.models.generateContent({
+        model,
+        contents,
+        config: {
+            systemInstruction,
+            responseMimeType: 'application/json',
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    competitorName: { type: Type.STRING },
+                    comparison: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                metric: { type: Type.STRING },
+                                yourBusiness: { type: Type.STRING, description: "Análise da empresa do usuário" },
+                                competitor: { type: Type.STRING, description: "Análise do concorrente" }
+                            },
+                            required: ['metric', 'yourBusiness', 'competitor']
+                        }
+                    },
+                    strategicRecommendations: {
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING }
+                    }
+                },
+                required: ['competitorName', 'comparison', 'strategicRecommendations']
+            }
+        }
+    });
+
+    return parseJsonResponse<HeadToHeadAnalysis>(response.text, "análise direta");
+}
+
+export async function getCustomerProfileAnalysis(businessData: string): Promise<CustomerProfile> {
+    const model = 'gemini-2.5-pro';
+    const prompt = getPrompt(PROMPT_KEYS.GET_CUSTOMER_PROFILE_ANALYSIS);
+    const systemInstruction = prompt.systemInstruction;
+    const contents = fillPromptTemplate(prompt.contents, { businessData });
+
+    const response = await ai.models.generateContent({
+        model,
+        contents,
+        config: {
+            systemInstruction,
+            responseMimeType: 'application/json',
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    genderDistribution: {
+                        type: Type.OBJECT,
+                        properties: {
+                            male: { type: Type.INTEGER, description: "Porcentagem de clientes do sexo masculino" },
+                            female: { type: Type.INTEGER, description: "Porcentagem de clientes do sexo feminino" },
+                            other: { type: Type.INTEGER, description: "Porcentagem de clientes de outros gêneros" }
+                        },
+                        required: ['male', 'female', 'other']
+                    },
+                    ageRange: { type: Type.STRING, description: "Faixa etária principal, ex: '25-45 anos'" },
+                    mainInterests: { type: Type.ARRAY, items: { type: Type.STRING } },
+                    summary: { type: Type.STRING, description: "Resumo do perfil do cliente." }
+                },
+                required: ['genderDistribution', 'ageRange', 'mainInterests', 'summary']
+            }
+        }
+    });
+    return parseJsonResponse<CustomerProfile>(response.text, "perfil do cliente");
+}
+
+export async function getReviewSentimentAnalysis(businessData: string): Promise<SentimentAnalysis> {
+    const model = 'gemini-2.5-pro';
+    const prompt = getPrompt(PROMPT_KEYS.GET_REVIEW_SENTIMENT_ANALYSIS);
+    const systemInstruction = prompt.systemInstruction;
+    const contents = fillPromptTemplate(prompt.contents, { businessData });
+
+    const response = await ai.models.generateContent({
+        model,
+        contents,
+        config: {
+            systemInstruction,
+            responseMimeType: 'application/json',
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    positiveThemes: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                theme: { type: Type.STRING },
+                                summary: { type: Type.STRING },
+                                mentions: { type: Type.INTEGER }
+                            },
+                            required: ['theme', 'summary', 'mentions']
+                        }
+                    },
+                    negativeThemes: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                theme: { type: Type.STRING },
+                                summary: { type: Type.STRING },
+                                mentions: { type: Type.INTEGER }
+                            },
+                            required: ['theme', 'summary', 'mentions']
+                        }
+                    }
+                },
+                required: ['positiveThemes', 'negativeThemes']
+            }
+        }
+    });
+    return parseJsonResponse<SentimentAnalysis>(response.text, "análise de sentimento");
+}
+
+export async function getKeywordVolume(keyword: string, city: string, state: string): Promise<KeywordVolumeResult> {
+    const model = 'gemini-2.5-pro';
+    const prompt = getPrompt(PROMPT_KEYS.GET_KEYWORD_VOLUME);
+    const systemInstruction = prompt.systemInstruction;
+    const contents = fillPromptTemplate(prompt.contents, { keyword, city, state });
+
+    const response = await ai.models.generateContent({
+        model,
+        contents,
+        config: {
+            systemInstruction,
+            responseMimeType: 'application/json',
+            responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                    keyword: { type: Type.STRING },
+                    monthlyVolumes: {
+                        type: Type.ARRAY,
+                        items: {
+                            type: Type.OBJECT,
+                            properties: {
+                                month: { type: Type.STRING, description: "Mês e ano, ex: Jan/24" },
+                                volume: { type: Type.INTEGER, description: "Volume de busca estimado" }
+                            },
+                            required: ['month', 'volume']
+                        }
+                    },
+                    analysis: { type: Type.STRING, description: "Análise da tendência de busca." }
+                },
+                required: ['keyword', 'monthlyVolumes', 'analysis']
+            }
+        }
+    });
+    return parseJsonResponse<KeywordVolumeResult>(response.text, "volume de busca de palavra-chave");
 }

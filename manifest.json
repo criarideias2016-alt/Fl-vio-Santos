@@ -1,0 +1,9 @@
+{
+  "short_name": "Otimizador",
+  "name": "Otimizador de Perfil de Empresa",
+  "description": "Uma suíte completa para analisar, otimizar e dominar a presença da sua empresa no Google.",
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#0f172a",
+  "background_color": "#0f172a"
+}

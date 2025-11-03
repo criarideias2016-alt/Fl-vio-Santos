@@ -15,15 +15,15 @@ const categoryIcons: { [key: string]: React.ReactNode } = {
 const IdeaCard: React.FC<{ idea: Idea }> = ({ idea }) => {
     const icon = categoryIcons[idea.category] || null;
     return (
-        <div className="bg-slate-800 border border-slate-700 rounded-lg p-5">
+        <div className="bg-white border border-gray-200 rounded-lg p-5">
             <div className="flex items-center gap-3 mb-3">
-                <div className="text-cyan-400">{icon}</div>
+                <div className="text-blue-600">{icon}</div>
                 <div>
-                    <span className="text-sm font-medium text-slate-400">{idea.category}</span>
-                    <h4 className="text-md font-bold text-slate-200">{idea.title}</h4>
+                    <span className="text-sm font-medium text-gray-500">{idea.category}</span>
+                    <h4 className="text-md font-bold text-gray-700">{idea.title}</h4>
                 </div>
             </div>
-            <p className="text-slate-400 text-sm">{idea.description}</p>
+            <p className="text-gray-600 text-sm">{idea.description}</p>
         </div>
     );
 };
@@ -32,25 +32,25 @@ export const IdeaGeneratorDisplay: React.FC<IdeaGeneratorDisplayProps> = ({ resu
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold text-slate-100 mb-2">Gerador de Ideias Criativas</h2>
-        <p className="text-slate-400 mb-6">Inspire-se com estas sugestões para engajar sua comunidade local e atrair novos clientes.</p>
+        <h2 className="text-2xl font-bold text-slate-800 border-b pb-3 mb-6">Gerador de Ideias Criativas</h2>
+        <p className="text-gray-600 mb-6">Inspire-se com estas sugestões para engajar sua comunidade local e atrair novos clientes.</p>
         
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold text-slate-200">Ideias de Marketing e Conteúdo</h3>
+            <h3 className="text-lg font-semibold text-gray-700">Ideias de Marketing e Conteúdo</h3>
             {result.ideas.map((idea, index) => (
                 <IdeaCard key={index} idea={idea} />
             ))}
           </div>
 
-          <div className="p-6 bg-gradient-to-br from-cyan-900/50 to-slate-800/50 rounded-lg border-2 border-cyan-500 shadow-lg shadow-cyan-500/10">
+          <div className="p-6 bg-gradient-to-br from-blue-100 to-gray-50 rounded-lg border-2 border-blue-300 shadow-lg shadow-blue-500/10">
                 <div className="flex items-center gap-3 mb-4">
-                    <div className="text-cyan-300">
+                    <div className="text-blue-600">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8"><path strokeLinecap="round" strokeLinejoin="round" d="M11.25 4.5l7.5 7.5-7.5 7.5m-6-15l7.5 7.5-7.5 7.5" /></svg>
                     </div>
-                    <h3 className="text-xl font-bold text-white">{result.photo360.title}</h3>
+                    <h3 className="text-xl font-bold text-gray-800">{result.photo360.title}</h3>
                 </div>
-                <p className="text-cyan-100/90 whitespace-pre-line">{result.photo360.description}</p>
+                <p className="text-blue-900/90 whitespace-pre-line">{result.photo360.description}</p>
           </div>
         </div>
       </div>

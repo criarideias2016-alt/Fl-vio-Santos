@@ -8,11 +8,6 @@ export interface AnalysisResult {
   suggestions: Suggestion[];
 }
 
-export interface UserLocation {
-  latitude: number;
-  longitude: number;
-}
-
 export interface GroundingChunk {
   maps: {
     title: string;
@@ -99,4 +94,61 @@ export interface ScorecardMetric {
 
 export interface DetailedScorecardResult {
     metrics: ScorecardMetric[];
+}
+
+export interface BenefitItem {
+    title: string;
+    description: string;
+    icon: string;
+}
+
+export interface OptimizationBenefits {
+    benefits: BenefitItem[];
+}
+
+export interface ComparisonMetric {
+    metric: string;
+    yourBusiness: string;
+    competitor: string;
+}
+
+export interface HeadToHeadAnalysis {
+    competitorName: string;
+    comparison: ComparisonMetric[];
+    strategicRecommendations: string[];
+}
+
+export interface GenderDistribution {
+    male: number;
+    female: number;
+    other: number;
+}
+
+export interface CustomerProfile {
+    genderDistribution: GenderDistribution;
+    ageRange: string;
+    mainInterests: string[];
+    summary: string;
+}
+
+export interface SentimentTheme {
+  theme: string;
+  summary: string;
+  mentions: number;
+}
+
+export interface SentimentAnalysis {
+  positiveThemes: SentimentTheme[];
+  negativeThemes: SentimentTheme[];
+}
+
+export interface MonthlyVolume {
+    month: string;
+    volume: number;
+}
+
+export interface KeywordVolumeResult {
+    keyword: string;
+    monthlyVolumes: MonthlyVolume[];
+    analysis: string;
 }
