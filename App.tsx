@@ -1,414 +1,51 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import type { AnalysisResult, GroundingChunk, CompetitiveAnalysis, KeywordsResult, ResponsesResult, SeoActionsResult, RadiusAnalysisResult, IdeasResult, LocalRankingResult, DetailedScorecardResult, OptimizationBenefits, HeadToHeadAnalysis, CustomerProfile, SentimentAnalysis } from './types';
-import { getImprovementSuggestions, fetchBusinessInfo, getCompetitorAnalysis, getKeywordSuggestions, getResponseTemplates, getSeoActions, getRadiusAnalysis, getIdeaSuggestions, getLocalRanking, getDetailedScorecard, getOptimizationBenefits, getHeadToHeadAnalysis, getCustomerProfileAnalysis, getReviewSentimentAnalysis } from './services/geminiService';
-import { SearchForm } from './components/SearchForm';
-import { LoadingIndicator } from './components/LoadingIndicator';
-import { ErrorMessage } from './components/ErrorMessage';
-import { WelcomeScreen } from './components/WelcomeScreen';
-import { ResultsContainer } from './components/ResultsContainer';
-import { DeveloperDashboard } from './components/DeveloperDashboard';
 
-declare const jspdf: any;
-declare const html2canvas: any;
-
-interface BeforeInstallPromptEvent extends Event {
-  readonly platforms: string[];
-  readonly userChoice: Promise<{
-    outcome: 'accepted' | 'dismissed';
-    platform: string;
-  }>;
-  prompt(): Promise<void>;
-}
-
+import React, { useState } from 'react';
+import { useAuth } from './contexts/AuthContext';
+import { LoginPage } from './components/auth/LoginPage';
+import { SignUpPage } from './components/auth/SignUpPage';
+import { SubscriptionPage } from './components/subscription/SubscriptionPage';
+import { AdminDashboard } from './components/admin/AdminDashboard';
+import { BusinessAnalyzer } from './components/BusinessAnalyzer';
 
 const App: React.FC = () => {
-  const [businessName, setBusinessName] = useState<string>('');
-  const [city, setCity] = useState<string>('');
-  const [state, setState] = useState<string>('');
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [loadingMessage, setLoadingMessage] = useState<string>('');
-  const [error, setError] = useState<string | null>(null);
-  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
-  const [competitiveAnalysis, setCompetitiveAnalysis] = useState<CompetitiveAnalysis | null>(null);
-  const [keywords, setKeywords] = useState<KeywordsResult | null>(null);
-  const [responses, setResponses] = useState<ResponsesResult | null>(null);
-  const [seoActions, setSeoActions] = useState<SeoActionsResult | null>(null);
-  const [radiusAnalysis, setRadiusAnalysis] = useState<RadiusAnalysisResult | null>(null);
-  const [ideas, setIdeas] = useState<IdeasResult | null>(null);
-  const [localRanking, setLocalRanking] = useState<LocalRankingResult | null>(null);
-  const [detailedScorecard, setDetailedScorecard] = useState<DetailedScorecardResult | null>(null);
-  const [optimizationBenefits, setOptimizationBenefits] = useState<OptimizationBenefits | null>(null);
-  const [headToHeadAnalysis, setHeadToHeadAnalysis] = useState<HeadToHeadAnalysis | null>(null);
-  const [customerProfile, setCustomerProfile] = useState<CustomerProfile | null>(null);
-  const [sentimentAnalysis, setSentimentAnalysis] = useState<SentimentAnalysis | null>(null);
-  const [sourceLinks, setSourceLinks] = useState<GroundingChunk[]>([]);
-  const [analysisCompleted, setAnalysisCompleted] = useState(false);
-  const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
-  const [isDevDashboardOpen, setIsDevDashboardOpen] = useState(false);
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { user, subscription, logout } = useAuth();
+  const [currentView, setCurrentView] = useState<'login' | 'signup'>('login');
+  const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
 
-  useEffect(() => {
-    const savedLogo = localStorage.getItem('custom_logo_png_base64');
-    if (savedLogo) {
-      setLogoUrl(savedLogo);
+  if (!user) {
+    if (currentView === 'login') {
+      return <LoginPage onSwitchToSignUp={() => setCurrentView('signup')} />;
     }
-  }, []);
+    return <SignUpPage onSwitchToLogin={() => setCurrentView('login')} />;
+  }
 
-  const handleLogoUpdate = (newLogoUrl: string | null) => {
-    setLogoUrl(newLogoUrl);
-    if (newLogoUrl) {
-      localStorage.setItem('custom_logo_png_base64', newLogoUrl);
-    } else {
-      localStorage.removeItem('custom_logo_png_base64');
-    }
-  };
+  if (user.role === 'admin' && isAdminDashboardOpen) {
+      return <AdminDashboard onClose={() => setIsAdminDashboardOpen(false)} />;
+  }
 
-  const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-        const file = e.target.files[0];
-        if (file.type === 'image/png') {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                handleLogoUpdate(reader.result as string);
-            };
-            reader.readAsDataURL(file);
-        } else {
-            alert('Por favor, selecione um arquivo no formato PNG.');
-        }
-    }
-  };
-
-  const handleRemoveLogo = () => {
-      handleLogoUpdate(null);
-  };
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-        e.preventDefault();
-        setIsDevDashboardOpen(prev => !prev);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
-
-  useEffect(() => {
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setInstallPrompt(e as BeforeInstallPromptEvent);
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
-    return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    };
-  }, []);
-
-  const handleInstallClick = () => {
-    if (!installPrompt) {
-      return;
-    }
-    installPrompt.prompt();
-    installPrompt.userChoice.then(() => {
-      setInstallPrompt(null);
-    });
-  };
-
-  const resetState = useCallback(() => {
-    setError(null);
-    setAnalysisResult(null);
-    setCompetitiveAnalysis(null);
-    setKeywords(null);
-    setResponses(null);
-    setSeoActions(null);
-    setRadiusAnalysis(null);
-    setIdeas(null);
-    setLocalRanking(null);
-    setDetailedScorecard(null);
-    setOptimizationBenefits(null);
-    setHeadToHeadAnalysis(null);
-    setCustomerProfile(null);
-    setSentimentAnalysis(null);
-    setSourceLinks([]);
-    setAnalysisCompleted(false);
-    setIsLoading(false);
-    setLoadingMessage('');
-  }, []);
-
-  const handleAnalyze = async () => {
-    resetState();
-    setIsLoading(true);
-    setAnalysisCompleted(false);
-
-    try {
-      setLoadingMessage('Buscando informações da empresa...');
-      const { businessData, groundingChunks } = await fetchBusinessInfo(businessName, city, state);
-      setSourceLinks(groundingChunks);
-
-      setLoadingMessage('Analisando concorrência...');
-      const competitorPromise = getCompetitorAnalysis(businessName, city, state);
-      
-      setLoadingMessage('Avaliando ranqueamento local...');
-      const rankingPromise = getLocalRanking(businessData);
-
-      setLoadingMessage('Gerando scorecard detalhado...');
-      const scorecardPromise = getDetailedScorecard(businessData);
-      
-      setLoadingMessage('Analisando perfil do cliente...');
-      const customerProfilePromise = getCustomerProfileAnalysis(businessData);
-      
-      setLoadingMessage('Analisando sentimento das avaliações...');
-      const sentimentAnalysisPromise = getReviewSentimentAnalysis(businessData);
-
-      setLoadingMessage('Gerando sugestões de palavras-chave...');
-      const keywordsPromise = getKeywordSuggestions(businessData);
-
-      setLoadingMessage('Analisando raio de atuação...');
-      const radiusPromise = getRadiusAnalysis(businessData);
-      
-      setLoadingMessage('Criando plano de ação SEO...');
-      const seoActionsPromise = getSeoActions(businessData);
-      
-      setLoadingMessage('Gerando modelos de resposta...');
-      const responsesPromise = getResponseTemplates(businessData);
-
-      setLoadingMessage('Compilando sugestões de melhoria...');
-      const suggestionsPromise = getImprovementSuggestions(businessData);
-      
-      setLoadingMessage('Gerando ideias criativas...');
-      const ideasPromise = getIdeaSuggestions(businessData);
-      
-      setLoadingMessage('Listando benefícios da otimização...');
-      const benefitsPromise = getOptimizationBenefits();
-      
-      const [
-          competitors,
-          ranking,
-          scorecard,
-          customer,
-          sentiment,
-          keywordsResult,
-          radius,
-          seo,
-          responsesResult,
-          suggestions,
-          ideasResult,
-          benefits
-      ] = await Promise.all([
-          competitorPromise,
-          rankingPromise,
-          scorecardPromise,
-          customerProfilePromise,
-          sentimentAnalysisPromise,
-          keywordsPromise,
-          radiusPromise,
-          seoActionsPromise,
-          responsesPromise,
-          suggestionsPromise,
-          ideasPromise,
-          benefitsPromise
-      ]);
-      
-      setCompetitiveAnalysis(competitors);
-      setLocalRanking(ranking);
-      setDetailedScorecard(scorecard);
-      setCustomerProfile(customer);
-      setSentimentAnalysis(sentiment);
-      setKeywords(keywordsResult);
-      setRadiusAnalysis(radius);
-      setSeoActions(seo);
-      setResponses(responsesResult);
-      setAnalysisResult(suggestions);
-      setIdeas(ideasResult);
-      setOptimizationBenefits(benefits);
-
-      if (competitors && competitors.analysis.length > 1) {
-          const mainBusiness = competitors.analysis.find(c => c.name.trim().toLowerCase().includes(businessName.trim().toLowerCase()));
-          const topCompetitor = competitors.analysis.find(c => c.name !== mainBusiness?.name);
-          if (topCompetitor) {
-              setLoadingMessage(`Analisando vs. ${topCompetitor.name}...`);
-              const h2h = await getHeadToHeadAnalysis(businessData, topCompetitor.name);
-              setHeadToHeadAnalysis(h2h);
-          }
-      }
-
-      setAnalysisCompleted(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ocorreu um erro desconhecido.');
-    } finally {
-      setIsLoading(false);
-      setLoadingMessage('');
-    }
-  };
+  if (subscription?.status !== 'active') {
+    return <SubscriptionPage />;
+  }
   
-  const generatePdf = async () => {
-    setIsGeneratingPdf(true);
-    
-    // Give React time to re-render with all sections visible
-    await new Promise(resolve => setTimeout(resolve, 200));
-
-    const reportElement = document.getElementById('report-content');
-    if (reportElement) {
-        const { jsPDF } = jspdf;
-        const pdf = new jsPDF({
-            orientation: 'p',
-            unit: 'pt',
-            format: 'a4',
-            putOnlyUsedFonts: true,
-            floatPrecision: 'smart'
-        });
-        
-        const canvas = await html2canvas(reportElement, {
-            scale: 2, // Higher resolution for better quality
-            useCORS: true,
-            logging: false,
-            width: reportElement.scrollWidth,
-            height: reportElement.scrollHeight,
-            windowWidth: reportElement.scrollWidth,
-            windowHeight: reportElement.scrollHeight,
-        });
-
-        const imgData = canvas.toDataURL('image/png');
-        const imgProps = pdf.getImageProperties(imgData);
-
-        const margin = 40; // 40pt margin on all sides
-        const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = pdf.internal.pageSize.getHeight();
-        
-        const contentWidth = pdfWidth - 2 * margin;
-        const contentHeight = pdfHeight - 2 * margin;
-
-        // Calculate the height of the image when scaled to fit the contentWidth
-        const imgRenderHeight = (imgProps.height * contentWidth) / imgProps.width;
-
-        let heightLeft = imgRenderHeight;
-        let position = 0;
-        let page = 1;
-        const totalPages = Math.ceil(imgRenderHeight / contentHeight);
-
-        const addHeaderAndFooter = () => {
-          pdf.setFontSize(8);
-          pdf.setTextColor(150);
-          
-          // Header
-          const headerText = `Relatório de Análise - ${businessName || 'Empresa'}`;
-          pdf.text(headerText, margin, margin / 2 + 5);
-
-          // Footer
-          const footerText = `Página ${page} de ${totalPages}`;
-          const footerTextWidth = pdf.getTextWidth(footerText);
-          pdf.text(footerText, pdfWidth - margin - footerTextWidth, pdfHeight - margin / 2 + 5);
-        };
-        
-        // Add first page
-        addHeaderAndFooter();
-        pdf.addImage(imgData, 'PNG', margin, margin, contentWidth, imgRenderHeight);
-        heightLeft -= contentHeight;
-
-        // Add subsequent pages if needed
-        while (heightLeft > 0) {
-            page++;
-            position -= contentHeight;
-            pdf.addPage();
-            addHeaderAndFooter();
-            pdf.addImage(imgData, 'PNG', margin, position + margin, contentWidth, imgRenderHeight);
-            heightLeft -= contentHeight;
-        }
-
-        const fileName = `Relatorio_${businessName.replace(/\s/g, '_')}_${new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')}.pdf`;
-        pdf.save(fileName);
-    }
-    
-    setIsGeneratingPdf(false);
-  };
-
-
+  // User is authenticated and subscribed
   return (
     <>
-      <div className="bg-slate-100 min-h-screen">
-          <header className="bg-white/80 backdrop-blur-sm shadow-sm sticky top-0 z-40 border-b border-slate-200/80">
-              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-between items-center">
-                  <div className="flex items-center gap-3">
-                      <input type="file" accept="image/png" ref={fileInputRef} onChange={handleLogoFileChange} className="hidden" />
-                      {logoUrl ? (
-                        <>
-                          <img src={logoUrl} alt="Logomarca da Empresa" className="h-10 object-contain" />
-                          <button onClick={handleRemoveLogo} className="p-1.5 rounded-full text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition-colors" title="Remover logomarca">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M10.343 3.94c.09-.542.56-1.003 1.11-1.226.554-.223 1.19-.223 1.745 0 .55.223 1.02.684 1.11 1.226l.044.269a2.25 2.25 0 011.617 1.618l.27.044c.542.09.998.56 1.226 1.11.223.554.223 1.19 0 1.745-.228.55-.684 1.02-1.226 1.11l-.27.044a2.25 2.25 0 01-1.617 1.618l-.044.27c-.09.542-.56 1.004-1.11 1.226-.554.223-1.19.223-1.745 0-.55-.223-1.02-.684-1.11-1.226l-.044-.269a2.25 2.25 0 01-1.617-1.618l-.27-.044c-.542-.09-.998-.56-1.226-1.11-.223-.554-.223-1.19 0-1.745.228-.55.684-1.02 1.226-1.11l.27-.044a2.25 2.25 0 011.617-1.618l.044-.27zM12 15.75a3.75 3.75 0 100-7.5 3.75 3.75 0 000 7.5z" /></svg>
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-8 h-8 text-blue-600"><path d="M10.5 1.148a.75.75 0 01.44 1.332l-3.042 1.521 4.545-1.515a.75.75 0 01.88 1.318l-5.25 1.75a.75.75 0 01-.88-1.318l3.042-1.014-4.545 1.515a.75.75 0 01-.88-1.318l5.25-1.75a.75.75 0 01.44-.001zM18.6 10.898a.75.75 0 01.88-1.318l3.042 1.014-4.545-1.515a.75.75 0 01-.44-1.332l5.25-1.75a.75.75 0 01.88 1.318l-3.042 1.521 4.545 1.515a.75.75 0 01.44 1.332l-5.25 1.75a.75.75 0 01-.88-1.318l3.042-1.014-4.545-1.515zM2.25 12c0-5.026 3.635-9.253 8.25-10.032a.75.75 0 01.75.734V9h8.25a3.75 3.75 0 013.75 3.75v5.25a3.75 3.75 0 01-3.75 3.75H8.25a3.75 3.75 0 01-3.75-3.75v-5.25H3.75a1.5 1.5 0 01-1.5-1.5z" /></svg>
-                          <h1 className="text-xl font-bold text-slate-800">Analisador de Perfil</h1>
-                           <button onClick={() => fileInputRef.current?.click()} className="p-1.5 rounded-full text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition-colors" title="Carregar logomarca (PNG)">
-                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
-                          </button>
-                        </>
-                      )}
-                  </div>
-                  {installPrompt && (
-                  <button onClick={handleInstallClick} className="hidden sm:flex items-center gap-2 bg-slate-800 text-white font-bold py-2 px-4 rounded-lg hover:bg-slate-900 transition-colors">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
-                      Instalar App
-                  </button>
-                  )}
-              </div>
-          </header>
-          <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-              <div className="bg-white/80 backdrop-blur-sm p-6 sm:p-8 rounded-2xl shadow-lg border border-slate-200/80 mb-8">
-                  <SearchForm
-                      businessName={businessName}
-                      setBusinessName={setBusinessName}
-                      city={city}
-                      setCity={setCity}
-                      state={state}
-                      setState={setState}
-                      onAnalyze={handleAnalyze}
-                      isLoading={isLoading}
-                  />
-              </div>
-
-              {analysisCompleted ? (
-                  <ResultsContainer
-                      analysisResult={analysisResult}
-                      competitiveAnalysis={competitiveAnalysis}
-                      localRanking={localRanking}
-                      detailedScorecard={detailedScorecard}
-                      optimizationBenefits={optimizationBenefits}
-                      headToHeadAnalysis={headToHeadAnalysis}
-                      customerProfile={customerProfile}
-                      sentimentAnalysis={sentimentAnalysis}
-                      keywords={keywords}
-                      responses={responses}
-                      seoActions={seoActions}
-                      radiusAnalysis={radiusAnalysis}
-                      ideas={ideas}
-                      sourceLinks={sourceLinks}
-                      businessName={businessName}
-                      city={city}
-                      state={state}
-                      onDownloadPdf={generatePdf}
-                      isGeneratingPdf={isGeneratingPdf}
-                  />
-              ) : (
-                <div className="space-y-6">
-                  {isLoading && <LoadingIndicator message={loadingMessage} />}
-                  {error && <ErrorMessage message={error} />}
-                  {!isLoading && !error && <WelcomeScreen />}
-                </div>
-              )}
-          </main>
-      </div>
-      <DeveloperDashboard 
-        isOpen={isDevDashboardOpen} 
-        onClose={() => setIsDevDashboardOpen(false)}
-      />
+      {user.role === 'admin' && (
+        <div className="bg-yellow-400 text-yellow-900 text-sm font-bold p-2 text-center sticky top-0 z-50">
+          <div className="max-w-7xl mx-auto flex justify-between items-center">
+             <span>Você está no modo Administrador.</span>
+             <div>
+               <button onClick={() => setIsAdminDashboardOpen(true)} className="bg-yellow-600 text-white py-1 px-3 rounded-md hover:bg-yellow-700 transition-colors mr-4">
+                  Acessar Dashboard
+               </button>
+               <button onClick={logout} className="bg-red-600 text-white py-1 px-3 rounded-md hover:bg-red-700 transition-colors">
+                  Sair
+               </button>
+             </div>
+          </div>
+        </div>
+      )}
+      <BusinessAnalyzer />
     </>
   );
 };

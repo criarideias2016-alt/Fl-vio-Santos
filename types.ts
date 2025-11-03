@@ -1,3 +1,4 @@
+
 export interface Suggestion {
   title: string;
   description: string;
@@ -151,4 +152,35 @@ export interface KeywordVolumeResult {
     keyword: string;
     monthlyVolumes: MonthlyVolume[];
     analysis: string;
+}
+
+// New types for Auth & Subscription
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: 'user' | 'admin';
+}
+
+export interface Subscription {
+  status: 'active' | 'pending' | 'expired' | 'inactive';
+  startDate: string | null;
+  endDate: string | null;
+  paymentId: string | null;
+}
+
+// New types for Admin Dashboard
+export interface AdminUser extends User {
+  subscription: Subscription;
+  createdAt: string;
+}
+
+export interface AdminPayment {
+  id: string;
+  userId: string;
+  userEmail: string;
+  amount: number;
+  method: 'Cartão de crédito' | 'Pix' | 'Boleto';
+  status: 'Pago' | 'Pendente' | 'Expirado';
+  paidDate: string;
 }

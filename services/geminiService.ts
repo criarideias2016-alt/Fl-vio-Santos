@@ -2,11 +2,21 @@ import { GoogleGenAI, Type } from '@google/genai';
 import type { AnalysisResult, CompetitiveAnalysis, DetailedScorecardResult, GroundingChunk, HeadToHeadAnalysis, IdeasResult, KeywordsResult, LocalRankingResult, OptimizationBenefits, RadiusAnalysisResult, ResponsesResult, SeoActionsResult, ScorecardMetric, CustomerProfile, SentimentAnalysis, KeywordVolumeResult } from '../types';
 import { getPrompt, PROMPT_KEYS } from './promptManager';
 
-if (!process.env.API_KEY) {
-  throw new Error("API_KEY environment variable not set");
-}
+const USER_API_KEY_STORAGE_KEY = 'gemini_user_api_key';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+function getAiClient(): GoogleGenAI {
+  const userApiKey = localStorage.getItem(USER_API_KEY_STORAGE_KEY);
+  
+  if (userApiKey) {
+    return new GoogleGenAI({ apiKey: userApiKey });
+  }
+
+  if (!process.env.API_KEY) {
+    throw new Error("Nenhuma chave de API configurada. Por favor, adicione sua chave nas configurações ou configure uma chave de ambiente.");
+  }
+  
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+}
 
 const fillPromptTemplate = (template: string, variables: Record<string, string | number>): string => {
   return template.replace(/\{\{(\w+)\}\}/g, (match, variableName) => {
@@ -35,6 +45,7 @@ export async function fetchBusinessInfo(
   city: string,
   state: string
 ): Promise<{ businessData: string; groundingChunks: GroundingChunk[] }> {
+  const ai = getAiClient();
   const model = 'gemini-2.5-flash';
   const prompt = getPrompt(PROMPT_KEYS.FETCH_BUSINESS_INFO);
   const contents = fillPromptTemplate(prompt.contents, { businessName, city, state });
@@ -58,6 +69,7 @@ export async function fetchBusinessInfo(
 }
 
 export async function getImprovementSuggestions(businessData: string): Promise<AnalysisResult> {
+  const ai = getAiClient();
   const model = 'gemini-2.5-pro';
   const prompt = getPrompt(PROMPT_KEYS.GET_IMPROVEMENT_SUGGESTIONS);
   const systemInstruction = prompt.systemInstruction;
@@ -107,6 +119,7 @@ export async function getCompetitorAnalysis(
   city: string,
   state: string
 ): Promise<CompetitiveAnalysis> {
+  const ai = getAiClient();
   const model = 'gemini-2.5-pro';
   const prompt = getPrompt(PROMPT_KEYS.GET_COMPETITOR_ANALYSIS);
   const systemInstruction = prompt.systemInstruction;
@@ -125,6 +138,7 @@ export async function getCompetitorAnalysis(
 }
 
 export async function getLocalRanking(businessData: string): Promise<LocalRankingResult> {
+    const ai = getAiClient();
     const model = 'gemini-2.5-pro';
     const prompt = getPrompt(PROMPT_KEYS.GET_LOCAL_RANKING);
     const systemInstruction = prompt.systemInstruction;
@@ -150,6 +164,7 @@ export async function getLocalRanking(businessData: string): Promise<LocalRankin
 }
 
 export async function getKeywordSuggestions(businessData: string): Promise<KeywordsResult> {
+    const ai = getAiClient();
     const model = 'gemini-2.5-pro';
     const prompt = getPrompt(PROMPT_KEYS.GET_KEYWORD_SUGGESTIONS);
     const systemInstruction = prompt.systemInstruction;
@@ -176,6 +191,7 @@ export async function getKeywordSuggestions(businessData: string): Promise<Keywo
 }
 
 export async function getResponseTemplates(businessData: string): Promise<ResponsesResult> {
+    const ai = getAiClient();
     const model = 'gemini-2.5-flash';
     const prompt = getPrompt(PROMPT_KEYS.GET_RESPONSE_TEMPLATES);
     const systemInstruction = prompt.systemInstruction;
@@ -201,6 +217,7 @@ export async function getResponseTemplates(businessData: string): Promise<Respon
 }
 
 export async function getSeoActions(businessData: string): Promise<SeoActionsResult> {
+    const ai = getAiClient();
     const model = 'gemini-2.5-pro';
     const prompt = getPrompt(PROMPT_KEYS.GET_SEO_ACTIONS);
     const systemInstruction = prompt.systemInstruction;
@@ -236,6 +253,7 @@ export async function getSeoActions(businessData: string): Promise<SeoActionsRes
 }
 
 export async function getRadiusAnalysis(businessData: string): Promise<RadiusAnalysisResult> {
+    const ai = getAiClient();
     const model = 'gemini-2.5-pro';
     const prompt = getPrompt(PROMPT_KEYS.GET_RADIUS_ANALYSIS);
     const systemInstruction = prompt.systemInstruction;
@@ -253,6 +271,7 @@ export async function getRadiusAnalysis(businessData: string): Promise<RadiusAna
 }
 
 export async function getIdeaSuggestions(businessData: string): Promise<IdeasResult> {
+    const ai = getAiClient();
     const model = 'gemini-2.5-pro';
     const prompt = getPrompt(PROMPT_KEYS.GET_IDEA_SUGGESTIONS);
     const systemInstruction = prompt.systemInstruction;
@@ -314,6 +333,7 @@ const METRIC_DESCRIPTIONS: { [key: string]: string } = {
 
 
 export async function getDetailedScorecard(businessData: string): Promise<DetailedScorecardResult> {
+    const ai = getAiClient();
     const model = 'gemini-2.5-pro';
     
     type AiScorecardMetric = Omit<ScorecardMetric, 'description'>;
@@ -365,6 +385,7 @@ export async function getDetailedScorecard(businessData: string): Promise<Detail
 }
 
 export async function getOptimizationBenefits(): Promise<OptimizationBenefits> {
+    const ai = getAiClient();
     const model = 'gemini-2.5-flash';
     const prompt = getPrompt(PROMPT_KEYS.GET_OPTIMIZATION_BENEFITS);
     const systemInstruction = prompt.systemInstruction;
@@ -402,6 +423,7 @@ export async function getOptimizationBenefits(): Promise<OptimizationBenefits> {
 
 
 export async function getHeadToHeadAnalysis(businessData: string, competitorName: string): Promise<HeadToHeadAnalysis> {
+    const ai = getAiClient();
     const model = 'gemini-2.5-pro';
     const prompt = getPrompt(PROMPT_KEYS.GET_HEAD_TO_HEAD_ANALYSIS);
     const systemInstruction = prompt.systemInstruction;
@@ -443,6 +465,7 @@ export async function getHeadToHeadAnalysis(businessData: string, competitorName
 }
 
 export async function getCustomerProfileAnalysis(businessData: string): Promise<CustomerProfile> {
+    const ai = getAiClient();
     const model = 'gemini-2.5-pro';
     const prompt = getPrompt(PROMPT_KEYS.GET_CUSTOMER_PROFILE_ANALYSIS);
     const systemInstruction = prompt.systemInstruction;
@@ -478,6 +501,7 @@ export async function getCustomerProfileAnalysis(businessData: string): Promise<
 }
 
 export async function getReviewSentimentAnalysis(businessData: string): Promise<SentimentAnalysis> {
+    const ai = getAiClient();
     const model = 'gemini-2.5-pro';
     const prompt = getPrompt(PROMPT_KEYS.GET_REVIEW_SENTIMENT_ANALYSIS);
     const systemInstruction = prompt.systemInstruction;
@@ -525,6 +549,7 @@ export async function getReviewSentimentAnalysis(businessData: string): Promise<
 }
 
 export async function getKeywordVolume(keyword: string, city: string, state: string): Promise<KeywordVolumeResult> {
+    const ai = getAiClient();
     const model = 'gemini-2.5-pro';
     const prompt = getPrompt(PROMPT_KEYS.GET_KEYWORD_VOLUME);
     const systemInstruction = prompt.systemInstruction;
