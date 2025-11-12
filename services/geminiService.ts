@@ -1,21 +1,13 @@
-import { GoogleGenAI, Type } from '@google/genai';
-import type { AnalysisResult, CompetitiveAnalysis, DetailedScorecardResult, GroundingChunk, HeadToHeadAnalysis, IdeasResult, KeywordsResult, LocalRankingResult, OptimizationBenefits, RadiusAnalysisResult, ResponsesResult, SeoActionsResult, ScorecardMetric, CustomerProfile, SentimentAnalysis, KeywordVolumeResult } from '../types';
-import { getPrompt, PROMPT_KEYS } from './promptManager';
+// services/geminiService.ts
+import { GoogleGenAI, Type } from "@google/genai";
+import type { AnalysisResult, CompetitiveAnalysis, DetailedScorecardResult, HeadToHeadAnalysis, IdeasResult, KeywordsResult, LocalRankingResult, OptimizationBenefits, RadiusAnalysisResult, ResponsesResult, SeoActionsResult, ScorecardMetric, CustomerProfile, SentimentAnalysis, KeywordVolumeResult, GrowthProjection } from '../types.ts';
+import { getPrompt, PROMPT_KEYS } from './promptManager.ts';
 
-const USER_API_KEY_STORAGE_KEY = 'gemini_user_api_key';
-
-function getAiClient(): GoogleGenAI {
-  const userApiKey = localStorage.getItem(USER_API_KEY_STORAGE_KEY);
-  
-  if (userApiKey) {
-    return new GoogleGenAI({ apiKey: userApiKey });
+function getAiClient(apiKey: string): GoogleGenAI {
+  if (!apiKey) {
+    throw new Error("A chave de API do Gemini não foi fornecida.");
   }
-
-  if (!process.env.API_KEY) {
-    throw new Error("Nenhuma chave de API configurada. Por favor, adicione sua chave nas configurações ou configure uma chave de ambiente.");
-  }
-  
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+  return new GoogleGenAI({ apiKey });
 }
 
 const fillPromptTemplate = (template: string, variables: Record<string, string | number>): string => {
@@ -24,7 +16,11 @@ const fillPromptTemplate = (template: string, variables: Record<string, string |
   });
 };
 
-const parseJsonResponse = <T>(jsonText: string, context: string): T => {
+const parseJsonResponse = <T>(jsonText: string | null, context: string): T => {
+  if (!jsonText) {
+      throw new Error(`A resposta da IA para ${context} estava vazia.`);
+  }
+
   let cleanedText = jsonText.trim();
   if (cleanedText.startsWith('```json')) {
     cleanedText = cleanedText.substring(7, cleanedText.length - 3).trim();
@@ -36,282 +32,155 @@ const parseJsonResponse = <T>(jsonText: string, context: string): T => {
     return JSON.parse(cleanedText);
   } catch (error) {
     console.error(`Failed to parse Gemini JSON response for ${context}:`, cleanedText);
-    throw new Error(`A resposta da IA para ${context} não estava no formato JSON esperado.`);
+    throw new Error(`A resposta da IA para ${context} não estava no formato JSON esperado. Resposta recebida: ${cleanedText}`);
   }
 };
 
+async function callGemini<T>(
+    apiKey: string,
+    model: 'gemini-2.5-pro' | 'gemini-2.5-flash',
+    promptKey: string,
+    variables: Record<string, string | number>,
+    isJson: boolean,
+    context: string,
+    responseSchema?: any 
+): Promise<T> {
+    const ai = getAiClient(apiKey);
+    const prompt = getPrompt(promptKey);
+    const systemInstruction = prompt.systemInstruction;
+    const contents = fillPromptTemplate(prompt.contents, variables);
+
+    const response = await ai.models.generateContent({
+        model,
+        contents,
+        config: {
+            ...(systemInstruction && { systemInstruction }),
+            ...(isJson && { responseMimeType: 'application/json' }),
+            ...(responseSchema && { responseSchema }),
+        },
+    });
+
+    const responseText = response.text;
+
+    if (isJson) {
+        return parseJsonResponse<T>(responseText, context);
+    }
+    
+    if (!responseText) {
+        throw new Error(`A resposta da IA para ${context} estava vazia.`);
+    }
+
+    return responseText as unknown as T;
+}
+
 export async function fetchBusinessInfo(
+  apiKey: string,
   businessName: string,
   city: string,
   state: string
-): Promise<{ businessData: string; groundingChunks: GroundingChunk[] }> {
-  const ai = getAiClient();
-  const model = 'gemini-2.5-flash';
-  const prompt = getPrompt(PROMPT_KEYS.FETCH_BUSINESS_INFO);
-  const contents = fillPromptTemplate(prompt.contents, { businessName, city, state });
-
-  const response = await ai.models.generateContent({
-    model,
-    contents,
-    config: {
-      tools: [{ googleMaps: {} }],
-    },
-  });
-
-  const businessData = response.text;
-  const groundingChunks = (response.candidates?.[0]?.groundingMetadata?.groundingChunks as GroundingChunk[]) ?? [];
-
-  if (!businessData) {
-    throw new Error('Não foi possível encontrar informações para esta empresa.');
-  }
-
-  return { businessData, groundingChunks };
+): Promise<{ businessData: string }> {
+    const businessData = await callGemini<string>(
+        apiKey,
+        'gemini-2.5-flash',
+        PROMPT_KEYS.FETCH_BUSINESS_INFO,
+        { businessName, city, state },
+        false,
+        'informações da empresa'
+    );
+    return { businessData };
 }
 
-export async function getImprovementSuggestions(businessData: string): Promise<AnalysisResult> {
-  const ai = getAiClient();
-  const model = 'gemini-2.5-pro';
-  const prompt = getPrompt(PROMPT_KEYS.GET_IMPROVEMENT_SUGGESTIONS);
-  const systemInstruction = prompt.systemInstruction;
-  const contents = fillPromptTemplate(prompt.contents, { businessData });
-
-  const response = await ai.models.generateContent({
-    model,
-    contents,
-    config: {
-      systemInstruction,
-      responseMimeType: 'application/json',
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          suggestions: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                title: {
-                  type: Type.STRING,
-                  description: 'Um título curto e impactante para a sugestão.',
-                },
-                description: {
-                  type: Type.STRING,
-                  description: 'Uma explicação detalhada da sugestão e por que é importante.',
-                },
-                category: {
-                  type: Type.STRING,
-                  description: "A categoria da sugestão. Deve ser uma das seguintes: 'Informações', 'Fotos', 'Avaliações', 'Postagens', 'SEO Local'.",
-                },
-              },
-              required: ['title', 'description', 'category'],
-            },
-          },
-        },
-        required: ['suggestions'],
-      },
-    },
-  });
-
-  return parseJsonResponse<AnalysisResult>(response.text, "sugestões de melhoria");
+export async function getImprovementSuggestions(apiKey: string, businessData: string): Promise<AnalysisResult> {
+    return callGemini<AnalysisResult>(
+        apiKey,
+        'gemini-2.5-pro',
+        PROMPT_KEYS.GET_IMPROVEMENT_SUGGESTIONS,
+        { businessData },
+        true,
+        'sugestões de melhoria'
+    );
 }
 
 export async function getCompetitorAnalysis(
+  apiKey: string,
   businessName: string,
   city: string,
   state: string
 ): Promise<CompetitiveAnalysis> {
-  const ai = getAiClient();
-  const model = 'gemini-2.5-pro';
-  const prompt = getPrompt(PROMPT_KEYS.GET_COMPETITOR_ANALYSIS);
-  const systemInstruction = prompt.systemInstruction;
-  const contents = fillPromptTemplate(prompt.contents, { businessName, city, state });
-  
-  const response = await ai.models.generateContent({
-    model,
-    contents,
-    config: {
-      systemInstruction,
-      tools: [{ googleMaps: {} }],
-    },
-  });
-
-  return parseJsonResponse<CompetitiveAnalysis>(response.text, "análise competitiva");
+    return callGemini<CompetitiveAnalysis>(
+        apiKey,
+        'gemini-2.5-pro',
+        PROMPT_KEYS.GET_COMPETITOR_ANALYSIS,
+        { businessName, city, state },
+        true,
+        'análise competitiva'
+    );
 }
 
-export async function getLocalRanking(businessData: string): Promise<LocalRankingResult> {
-    const ai = getAiClient();
-    const model = 'gemini-2.5-pro';
-    const prompt = getPrompt(PROMPT_KEYS.GET_LOCAL_RANKING);
-    const systemInstruction = prompt.systemInstruction;
-    const contents = fillPromptTemplate(prompt.contents, { businessData });
-    
-    const response = await ai.models.generateContent({
-        model,
-        contents,
-        config: {
-            systemInstruction,
-            responseMimeType: 'application/json',
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    ranking: { type: Type.STRING, description: 'O tier de ranqueamento, ex: "Top 5".' },
-                    justification: { type: Type.STRING, description: 'A análise detalhada do ranqueamento.' }
-                },
-                required: ['ranking', 'justification']
-            }
-        }
-    });
-    return parseJsonResponse<LocalRankingResult>(response.text, "ranqueamento local");
+export async function getLocalRanking(apiKey: string, businessData: string): Promise<LocalRankingResult> {
+    return callGemini<LocalRankingResult>(
+        apiKey,
+        'gemini-2.5-pro',
+        PROMPT_KEYS.GET_LOCAL_RANKING,
+        { businessData },
+        true,
+        'ranqueamento local'
+    );
 }
 
-export async function getKeywordSuggestions(businessData: string): Promise<KeywordsResult> {
-    const ai = getAiClient();
-    const model = 'gemini-2.5-pro';
-    const prompt = getPrompt(PROMPT_KEYS.GET_KEYWORD_SUGGESTIONS);
-    const systemInstruction = prompt.systemInstruction;
-    const contents = fillPromptTemplate(prompt.contents, { businessData });
-
-    const response = await ai.models.generateContent({
-        model,
-        contents,
-        config: {
-            systemInstruction,
-            responseMimeType: 'application/json',
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    principais: { type: Type.ARRAY, items: { type: Type.STRING } },
-                    caudaLonga: { type: Type.ARRAY, items: { type: Type.STRING } },
-                    locais: { type: Type.ARRAY, items: { type: Type.STRING } }
-                },
-                required: ['principais', 'caudaLonga', 'locais']
-            }
-        }
-    });
-    return parseJsonResponse<KeywordsResult>(response.text, "palavras-chave");
+export async function getKeywordSuggestions(apiKey: string, businessData: string): Promise<KeywordsResult> {
+    return callGemini<KeywordsResult>(
+        apiKey,
+        'gemini-2.5-pro',
+        PROMPT_KEYS.GET_KEYWORD_SUGGESTIONS,
+        { businessData },
+        true,
+        'palavras-chave'
+    );
 }
 
-export async function getResponseTemplates(businessData: string): Promise<ResponsesResult> {
-    const ai = getAiClient();
-    const model = 'gemini-2.5-flash';
-    const prompt = getPrompt(PROMPT_KEYS.GET_RESPONSE_TEMPLATES);
-    const systemInstruction = prompt.systemInstruction;
-    const contents = fillPromptTemplate(prompt.contents, { businessData });
-
-    const response = await ai.models.generateContent({
-        model,
-        contents,
-        config: {
-            systemInstruction,
-            responseMimeType: 'application/json',
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    positive: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, text: { type: Type.STRING } }, required: ['title', 'text'] } },
-                    negative: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, text: { type: Type.STRING } }, required: ['title', 'text'] } }
-                },
-                required: ['positive', 'negative']
-            }
-        }
-    });
-    return parseJsonResponse<ResponsesResult>(response.text, "modelos de resposta");
+export async function getResponseTemplates(apiKey: string, businessData: string): Promise<ResponsesResult> {
+    return callGemini<ResponsesResult>(
+        apiKey,
+        'gemini-2.5-flash',
+        PROMPT_KEYS.GET_RESPONSE_TEMPLATES,
+        { businessData },
+        true,
+        'modelos de resposta'
+    );
 }
 
-export async function getSeoActions(businessData: string): Promise<SeoActionsResult> {
-    const ai = getAiClient();
-    const model = 'gemini-2.5-pro';
-    const prompt = getPrompt(PROMPT_KEYS.GET_SEO_ACTIONS);
-    const systemInstruction = prompt.systemInstruction;
-    const contents = fillPromptTemplate(prompt.contents, { businessData });
-
-    const response = await ai.models.generateContent({
-        model,
-        contents,
-        config: {
-            systemInstruction,
-            responseMimeType: 'application/json',
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    actions: {
-                        type: Type.ARRAY,
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                title: { type: Type.STRING },
-                                description: { type: Type.STRING },
-                                priority: { type: Type.STRING }
-                            },
-                            required: ['title', 'description', 'priority']
-                        }
-                    }
-                },
-                required: ['actions']
-            }
-        }
-    });
-    return parseJsonResponse<SeoActionsResult>(response.text, "ações de SEO");
+export async function getSeoActions(apiKey: string, businessData: string): Promise<SeoActionsResult> {
+    return callGemini<SeoActionsResult>(
+        apiKey,
+        'gemini-2.5-pro',
+        PROMPT_KEYS.GET_SEO_ACTIONS,
+        { businessData },
+        true,
+        'ações de SEO'
+    );
 }
 
-export async function getRadiusAnalysis(businessData: string): Promise<RadiusAnalysisResult> {
-    const ai = getAiClient();
-    const model = 'gemini-2.5-pro';
-    const prompt = getPrompt(PROMPT_KEYS.GET_RADIUS_ANALYSIS);
-    const systemInstruction = prompt.systemInstruction;
-    const contents = fillPromptTemplate(prompt.contents, { businessData });
-    
-    const response = await ai.models.generateContent({
-        model,
-        contents,
-        config: {
-            systemInstruction,
-            tools: [{ googleMaps: {} }],
-        }
-    });
-    return parseJsonResponse<RadiusAnalysisResult>(response.text, "análise de raio");
+export async function getRadiusAnalysis(apiKey: string, businessData: string): Promise<RadiusAnalysisResult> {
+    return callGemini<RadiusAnalysisResult>(
+        apiKey,
+        'gemini-2.5-pro',
+        PROMPT_KEYS.GET_RADIUS_ANALYSIS,
+        { businessData },
+        true,
+        'análise de raio'
+    );
 }
 
-export async function getIdeaSuggestions(businessData: string): Promise<IdeasResult> {
-    const ai = getAiClient();
-    const model = 'gemini-2.5-pro';
-    const prompt = getPrompt(PROMPT_KEYS.GET_IDEA_SUGGESTIONS);
-    const systemInstruction = prompt.systemInstruction;
-    const contents = fillPromptTemplate(prompt.contents, { businessData });
-
-    const response = await ai.models.generateContent({
-        model,
-        contents,
-        config: {
-            systemInstruction,
-            responseMimeType: 'application/json',
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    ideas: {
-                        type: Type.ARRAY,
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                title: { type: Type.STRING },
-                                description: { type: Type.STRING },
-                                category: { type: Type.STRING }
-                            },
-                            required: ['title', 'description', 'category']
-                        }
-                    },
-                    photo360: {
-                        type: Type.OBJECT,
-                        properties: {
-                            title: { type: Type.STRING },
-                            description: { type: Type.STRING }
-                        },
-                        required: ['title', 'description']
-                    }
-                },
-                required: ['ideas', 'photo360']
-            }
-        }
-    });
-    return parseJsonResponse<IdeasResult>(response.text, "gerador de ideias");
+export async function getIdeaSuggestions(apiKey: string, businessData: string): Promise<IdeasResult> {
+    return callGemini<IdeasResult>(
+        apiKey,
+        'gemini-2.5-pro',
+        PROMPT_KEYS.GET_IDEA_SUGGESTIONS,
+        { businessData },
+        true,
+        'gerador de ideias'
+    );
 }
 
 const METRIC_DESCRIPTIONS: { [key: string]: string } = {
@@ -332,49 +201,22 @@ const METRIC_DESCRIPTIONS: { [key: string]: string } = {
 };
 
 
-export async function getDetailedScorecard(businessData: string): Promise<DetailedScorecardResult> {
-    const ai = getAiClient();
-    const model = 'gemini-2.5-pro';
-    
+export async function getDetailedScorecard(apiKey: string, businessData: string): Promise<DetailedScorecardResult> {
     type AiScorecardMetric = Omit<ScorecardMetric, 'description'>;
     interface AiDetailedScorecardResult {
       metrics: AiScorecardMetric[];
     }
     
-    const prompt = getPrompt(PROMPT_KEYS.GET_DETAILED_SCORECARD);
     const metricKeys = Object.keys(METRIC_DESCRIPTIONS).join('", "');
-    const systemInstruction = fillPromptTemplate(prompt.systemInstruction, { metricKeys });
-    const contents = fillPromptTemplate(prompt.contents, { businessData });
 
-    const response = await ai.models.generateContent({
-        model,
-        contents,
-        config: {
-            systemInstruction,
-            responseMimeType: 'application/json',
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    metrics: {
-                        type: Type.ARRAY,
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                name: { type: Type.STRING },
-                                analysis: { type: Type.STRING },
-                                status: { type: Type.STRING },
-                                score: { type: Type.INTEGER }
-                            },
-                            required: ['name', 'analysis', 'status', 'score']
-                        }
-                    }
-                },
-                required: ['metrics']
-            }
-        }
-    });
-
-    const aiResult = parseJsonResponse<AiDetailedScorecardResult>(response.text, "scorecard detalhado");
+    const aiResult = await callGemini<AiDetailedScorecardResult>(
+        apiKey,
+        'gemini-2.5-pro',
+        PROMPT_KEYS.GET_DETAILED_SCORECARD,
+        { businessData, metricKeys },
+        true,
+        'scorecard detalhado'
+    );
 
     const augmentedMetrics = aiResult.metrics.map(metric => ({
         ...metric,
@@ -384,203 +226,134 @@ export async function getDetailedScorecard(businessData: string): Promise<Detail
     return { metrics: augmentedMetrics };
 }
 
-export async function getOptimizationBenefits(): Promise<OptimizationBenefits> {
-    const ai = getAiClient();
-    const model = 'gemini-2.5-flash';
-    const prompt = getPrompt(PROMPT_KEYS.GET_OPTIMIZATION_BENEFITS);
-    const systemInstruction = prompt.systemInstruction;
-    const contents = prompt.contents;
-
-    const response = await ai.models.generateContent({
-        model,
-        contents,
-        config: {
-            systemInstruction,
-            responseMimeType: 'application/json',
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    benefits: {
-                        type: Type.ARRAY,
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                title: { type: Type.STRING },
-                                description: { type: Type.STRING },
-                                icon: { type: Type.STRING, description: 'Nome do ícone do Heroicons (outline), ex: chart-bar' }
-                            },
-                            required: ['title', 'description', 'icon']
-                        }
-                    }
-                },
-                required: ['benefits']
+export async function getOptimizationBenefits(apiKey: string): Promise<OptimizationBenefits> {
+    const schema = {
+        type: Type.OBJECT,
+        properties: {
+            benefits: {
+                type: Type.ARRAY,
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        title: { type: Type.STRING },
+                        description: { type: Type.STRING },
+                        icon: { type: Type.STRING }
+                    },
+                    required: ["title", "description", "icon"]
+                }
             }
-        }
-    });
-
-    return parseJsonResponse<OptimizationBenefits>(response.text, "benefícios da otimização");
+        },
+        required: ["benefits"]
+    };
+    return callGemini<OptimizationBenefits>(
+        apiKey,
+        'gemini-2.5-flash',
+        PROMPT_KEYS.GET_OPTIMIZATION_BENEFITS,
+        {},
+        true,
+        'benefícios da otimização',
+        schema
+    );
 }
 
 
-export async function getHeadToHeadAnalysis(businessData: string, competitorName: string): Promise<HeadToHeadAnalysis> {
-    const ai = getAiClient();
-    const model = 'gemini-2.5-pro';
-    const prompt = getPrompt(PROMPT_KEYS.GET_HEAD_TO_HEAD_ANALYSIS);
-    const systemInstruction = prompt.systemInstruction;
-    const contents = fillPromptTemplate(prompt.contents, { businessData, competitorName });
-
-    const response = await ai.models.generateContent({
-        model,
-        contents,
-        config: {
-            systemInstruction,
-            responseMimeType: 'application/json',
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    competitorName: { type: Type.STRING },
-                    comparison: {
-                        type: Type.ARRAY,
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                metric: { type: Type.STRING },
-                                yourBusiness: { type: Type.STRING, description: "Análise da empresa do usuário" },
-                                competitor: { type: Type.STRING, description: "Análise do concorrente" }
-                            },
-                            required: ['metric', 'yourBusiness', 'competitor']
-                        }
+export async function getHeadToHeadAnalysis(apiKey: string, businessData: string, competitorName: string): Promise<HeadToHeadAnalysis> {
+    const schema = {
+        type: Type.OBJECT,
+        properties: {
+            competitorName: { type: Type.STRING },
+            comparison: {
+                type: Type.ARRAY,
+                items: {
+                    type: Type.OBJECT,
+                    properties: {
+                        metric: { type: Type.STRING },
+                        yourBusiness: { type: Type.STRING },
+                        competitor: { type: Type.STRING }
                     },
-                    strategicRecommendations: {
-                        type: Type.ARRAY,
-                        items: { type: Type.STRING }
-                    }
-                },
-                required: ['competitorName', 'comparison', 'strategicRecommendations']
+                    required: ["metric", "yourBusiness", "competitor"]
+                }
+            },
+            strategicRecommendations: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING }
             }
-        }
-    });
-
-    return parseJsonResponse<HeadToHeadAnalysis>(response.text, "análise direta");
+        },
+        required: ["competitorName", "comparison", "strategicRecommendations"]
+    };
+    return callGemini<HeadToHeadAnalysis>(
+        apiKey,
+        'gemini-2.5-pro',
+        PROMPT_KEYS.GET_HEAD_TO_HEAD_ANALYSIS,
+        { businessData, competitorName },
+        true,
+        'análise direta',
+        schema
+    );
 }
 
-export async function getCustomerProfileAnalysis(businessData: string): Promise<CustomerProfile> {
-    const ai = getAiClient();
-    const model = 'gemini-2.5-pro';
-    const prompt = getPrompt(PROMPT_KEYS.GET_CUSTOMER_PROFILE_ANALYSIS);
-    const systemInstruction = prompt.systemInstruction;
-    const contents = fillPromptTemplate(prompt.contents, { businessData });
-
-    const response = await ai.models.generateContent({
-        model,
-        contents,
-        config: {
-            systemInstruction,
-            responseMimeType: 'application/json',
-            responseSchema: {
+export async function getCustomerProfileAnalysis(apiKey: string, businessData: string): Promise<CustomerProfile> {
+    const schema = {
+        type: Type.OBJECT,
+        properties: {
+            genderDistribution: {
                 type: Type.OBJECT,
                 properties: {
-                    genderDistribution: {
-                        type: Type.OBJECT,
-                        properties: {
-                            male: { type: Type.INTEGER, description: "Porcentagem de clientes do sexo masculino" },
-                            female: { type: Type.INTEGER, description: "Porcentagem de clientes do sexo feminino" },
-                            other: { type: Type.INTEGER, description: "Porcentagem de clientes de outros gêneros" }
-                        },
-                        required: ['male', 'female', 'other']
-                    },
-                    ageRange: { type: Type.STRING, description: "Faixa etária principal, ex: '25-45 anos'" },
-                    mainInterests: { type: Type.ARRAY, items: { type: Type.STRING } },
-                    summary: { type: Type.STRING, description: "Resumo do perfil do cliente." }
+                    male: { type: Type.NUMBER },
+                    female: { type: Type.NUMBER },
+                    other: { type: Type.NUMBER }
                 },
-                required: ['genderDistribution', 'ageRange', 'mainInterests', 'summary']
-            }
-        }
-    });
-    return parseJsonResponse<CustomerProfile>(response.text, "perfil do cliente");
+                required: ["male", "female", "other"]
+            },
+            ageRange: { type: Type.STRING },
+            mainInterests: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING }
+            },
+            summary: { type: Type.STRING }
+        },
+        required: ["genderDistribution", "ageRange", "mainInterests", "summary"]
+    };
+    return callGemini<CustomerProfile>(
+        apiKey,
+        'gemini-2.5-pro',
+        PROMPT_KEYS.GET_CUSTOMER_PROFILE_ANALYSIS,
+        { businessData },
+        true,
+        'perfil do cliente',
+        schema
+    );
 }
 
-export async function getReviewSentimentAnalysis(businessData: string): Promise<SentimentAnalysis> {
-    const ai = getAiClient();
-    const model = 'gemini-2.5-pro';
-    const prompt = getPrompt(PROMPT_KEYS.GET_REVIEW_SENTIMENT_ANALYSIS);
-    const systemInstruction = prompt.systemInstruction;
-    const contents = fillPromptTemplate(prompt.contents, { businessData });
-
-    const response = await ai.models.generateContent({
-        model,
-        contents,
-        config: {
-            systemInstruction,
-            responseMimeType: 'application/json',
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    positiveThemes: {
-                        type: Type.ARRAY,
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                theme: { type: Type.STRING },
-                                summary: { type: Type.STRING },
-                                mentions: { type: Type.INTEGER }
-                            },
-                            required: ['theme', 'summary', 'mentions']
-                        }
-                    },
-                    negativeThemes: {
-                        type: Type.ARRAY,
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                theme: { type: Type.STRING },
-                                summary: { type: Type.STRING },
-                                mentions: { type: Type.INTEGER }
-                            },
-                            required: ['theme', 'summary', 'mentions']
-                        }
-                    }
-                },
-                required: ['positiveThemes', 'negativeThemes']
-            }
-        }
-    });
-    return parseJsonResponse<SentimentAnalysis>(response.text, "análise de sentimento");
+export async function getReviewSentimentAnalysis(apiKey: string, businessData: string): Promise<SentimentAnalysis> {
+    return callGemini<SentimentAnalysis>(
+        apiKey,
+        'gemini-2.5-pro',
+        PROMPT_KEYS.GET_REVIEW_SENTIMENT_ANALYSIS,
+        { businessData },
+        true,
+        'análise de sentimento'
+    );
 }
 
-export async function getKeywordVolume(keyword: string, city: string, state: string): Promise<KeywordVolumeResult> {
-    const ai = getAiClient();
-    const model = 'gemini-2.5-pro';
-    const prompt = getPrompt(PROMPT_KEYS.GET_KEYWORD_VOLUME);
-    const systemInstruction = prompt.systemInstruction;
-    const contents = fillPromptTemplate(prompt.contents, { keyword, city, state });
+export async function getKeywordVolume(apiKey: string, keyword: string, city: string, state: string): Promise<KeywordVolumeResult> {
+    return callGemini<KeywordVolumeResult>(
+        apiKey,
+        'gemini-2.5-pro',
+        PROMPT_KEYS.GET_KEYWORD_VOLUME,
+        { keyword, city, state },
+        true,
+        'volume de busca de palavra-chave'
+    );
+}
 
-    const response = await ai.models.generateContent({
-        model,
-        contents,
-        config: {
-            systemInstruction,
-            responseMimeType: 'application/json',
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    keyword: { type: Type.STRING },
-                    monthlyVolumes: {
-                        type: Type.ARRAY,
-                        items: {
-                            type: Type.OBJECT,
-                            properties: {
-                                month: { type: Type.STRING, description: "Mês e ano, ex: Jan/24" },
-                                volume: { type: Type.INTEGER, description: "Volume de busca estimado" }
-                            },
-                            required: ['month', 'volume']
-                        }
-                    },
-                    analysis: { type: Type.STRING, description: "Análise da tendência de busca." }
-                },
-                required: ['keyword', 'monthlyVolumes', 'analysis']
-            }
-        }
-    });
-    return parseJsonResponse<KeywordVolumeResult>(response.text, "volume de busca de palavra-chave");
+export async function getGrowthProjection(apiKey: string, businessData: string, visibilityScore: number): Promise<GrowthProjection> {
+    return callGemini<GrowthProjection>(
+        apiKey,
+        'gemini-2.5-flash',
+        PROMPT_KEYS.GET_GROWTH_PROJECTION,
+        { businessData, visibilityScore },
+        true,
+        'projeção de crescimento'
+    );
 }

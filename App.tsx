@@ -1,51 +1,40 @@
+import React, { FC, useState, useEffect } from 'react';
+import { Dashboard } from './components/Dashboard.tsx';
+import { ToastContainer } from './components/ui/Toast.tsx';
+import { SplashScreen } from './components/SplashScreen.tsx';
 
-import React, { useState } from 'react';
-import { useAuth } from './contexts/AuthContext';
-import { LoginPage } from './components/auth/LoginPage';
-import { SignUpPage } from './components/auth/SignUpPage';
-import { SubscriptionPage } from './components/subscription/SubscriptionPage';
-import { AdminDashboard } from './components/admin/AdminDashboard';
-import { BusinessAnalyzer } from './components/BusinessAnalyzer';
+const SPLASH_VISIBLE_DURATION = 2500; // Tempo que a splash screen fica visível antes de começar a desaparecer
+const FADE_OUT_DURATION = 500;       // Duração da animação de desaparecimento (deve corresponder ao CSS)
 
-const App: React.FC = () => {
-  const { user, subscription, logout } = useAuth();
-  const [currentView, setCurrentView] = useState<'login' | 'signup'>('login');
-  const [isAdminDashboardOpen, setIsAdminDashboardOpen] = useState(false);
+const App: FC = () => {
+  // Estado para a lógica da tela de splash.
+  const [isSplashVisible, setIsSplashVisible] = useState(() => !sessionStorage.getItem('splashShown'));
+  const [isFadingOut, setIsFadingOut] = useState(false);
 
-  if (!user) {
-    if (currentView === 'login') {
-      return <LoginPage onSwitchToSignUp={() => setCurrentView('signup')} />;
+  useEffect(() => {
+    if (isSplashVisible) {
+      // Timer para iniciar o fade out
+      const fadeTimer = setTimeout(() => {
+        setIsFadingOut(true);
+        sessionStorage.setItem('splashShown', 'true');
+
+        // Timer para remover o componente do DOM após o fade out
+        const visibilityTimer = setTimeout(() => {
+          setIsSplashVisible(false);
+        }, FADE_OUT_DURATION);
+
+        return () => clearTimeout(visibilityTimer);
+      }, SPLASH_VISIBLE_DURATION);
+
+      return () => clearTimeout(fadeTimer);
     }
-    return <SignUpPage onSwitchToLogin={() => setCurrentView('login')} />;
-  }
-
-  if (user.role === 'admin' && isAdminDashboardOpen) {
-      return <AdminDashboard onClose={() => setIsAdminDashboardOpen(false)} />;
-  }
-
-  if (subscription?.status !== 'active') {
-    return <SubscriptionPage />;
-  }
+  }, [isSplashVisible]);
   
-  // User is authenticated and subscribed
   return (
     <>
-      {user.role === 'admin' && (
-        <div className="bg-yellow-400 text-yellow-900 text-sm font-bold p-2 text-center sticky top-0 z-50">
-          <div className="max-w-7xl mx-auto flex justify-between items-center">
-             <span>Você está no modo Administrador.</span>
-             <div>
-               <button onClick={() => setIsAdminDashboardOpen(true)} className="bg-yellow-600 text-white py-1 px-3 rounded-md hover:bg-yellow-700 transition-colors mr-4">
-                  Acessar Dashboard
-               </button>
-               <button onClick={logout} className="bg-red-600 text-white py-1 px-3 rounded-md hover:bg-red-700 transition-colors">
-                  Sair
-               </button>
-             </div>
-          </div>
-        </div>
-      )}
-      <BusinessAnalyzer />
+      <ToastContainer />
+      {isSplashVisible && <SplashScreen isFadingOut={isFadingOut} />}
+      {!isSplashVisible && <Dashboard />}
     </>
   );
 };

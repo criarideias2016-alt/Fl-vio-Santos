@@ -1,5 +1,5 @@
-import React from 'react';
-import type { OptimizationBenefits, BenefitItem } from '../types';
+import React, { FC } from 'react';
+import type { OptimizationBenefits, BenefitItem } from '../types.ts';
 
 interface OptimizationBenefitsDisplayProps {
   result: OptimizationBenefits;
@@ -18,7 +18,7 @@ interface HeroIconProps {
   className?: string;
 }
 
-const HeroIcon: React.FC<HeroIconProps> = ({ icon, className = "w-6 h-6" }) => {
+const HeroIcon: FC<HeroIconProps> = ({ icon, className = "w-6 h-6" }) => {
   const pathData = iconPaths[icon] || iconPaths['default'];
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
@@ -28,26 +28,35 @@ const HeroIcon: React.FC<HeroIconProps> = ({ icon, className = "w-6 h-6" }) => {
 };
 
 
-const BenefitCard: React.FC<{ item: BenefitItem }> = ({ item }) => {
+const BenefitCard: FC<{ item: BenefitItem }> = ({ item }) => {
   return (
-    <div className="flex items-start gap-4 p-4 bg-white rounded-lg border border-gray-200 hover:border-blue-300/50 hover:shadow-md transition-all">
-      <div className="flex-shrink-0 text-blue-600 mt-1">
+    <div className="flex items-start gap-4 p-4 bg-white dark:bg-slate-800/50 rounded-lg border border-gray-200 dark:border-slate-700 hover:border-blue-300/50 dark:hover:border-blue-600 hover:shadow-md transition-all">
+      <div className="flex-shrink-0 text-blue-600 dark:text-blue-400 mt-1">
         <HeroIcon icon={item.icon} className="w-8 h-8" />
       </div>
       <div>
-        <h3 className="font-semibold text-gray-800">{item.title}</h3>
-        <p className="text-gray-600 text-sm">{item.description}</p>
+        <h3 className="font-semibold text-gray-800 dark:text-slate-200">{item.title}</h3>
+        <p className="text-gray-600 dark:text-slate-400 text-sm">{item.description}</p>
       </div>
     </div>
   );
 };
 
-export const OptimizationBenefitsDisplay: React.FC<OptimizationBenefitsDisplayProps> = ({ result }) => {
+export const OptimizationBenefitsDisplay: FC<OptimizationBenefitsDisplayProps> = ({ result }) => {
+  if (!result || !Array.isArray(result.benefits)) {
+    return (
+      <div className="p-6 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+        <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200 border-b dark:border-slate-700 pb-3 mb-6">Benefícios da Otimização</h2>
+        <p className="text-slate-500 dark:text-slate-400">Não foi possível carregar os benefícios. Tente novamente mais tarde.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold text-slate-800 border-b pb-3 mb-6">Benefícios da Otimização</h2>
-        <p className="text-gray-600 mb-6">Um Perfil de Empresa bem gerenciado no Google é uma das ferramentas de marketing mais poderosas para negócios locais. Veja os benefícios:</p>
+        <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200 border-b dark:border-slate-700 pb-3 mb-6">Benefícios da Otimização</h2>
+        <p className="text-gray-600 dark:text-slate-400 mb-6">Um Perfil de Empresa bem gerenciado no Google é uma das ferramentas de marketing mais poderosas para negócios locais. Veja os benefícios:</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {result.benefits.map((benefit, index) => (
             <BenefitCard key={index} item={benefit} />

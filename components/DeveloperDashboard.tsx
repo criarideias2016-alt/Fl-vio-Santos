@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { getAllPrompts, saveAllPrompts, resetPrompts, PROMPT_KEYS, DEFAULT_PROMPTS } from '../services/promptManager';
+import React, { useState, useEffect, FC } from 'react';
+import { getAllPrompts, saveAllPrompts, resetPrompts, PROMPT_KEYS, DEFAULT_PROMPTS } from '../services/promptManager.ts';
+import { useNotification } from '../../contexts/NotificationContext.tsx';
 
 interface DeveloperDashboardProps {
   isOpen: boolean;
@@ -22,11 +23,12 @@ const promptLabels: { [key: string]: string } = {
   [PROMPT_KEYS.GET_CUSTOMER_PROFILE_ANALYSIS]: "13. Perfil do Cliente",
   [PROMPT_KEYS.GET_REVIEW_SENTIMENT_ANALYSIS]: "14. Análise de Sentimento",
   [PROMPT_KEYS.GET_KEYWORD_VOLUME]: "15. Volume de Busca de Palavras-Chave",
+  [PROMPT_KEYS.GET_GROWTH_PROJECTION]: "16. Projeção de Crescimento"
 };
 
-export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ isOpen, onClose }) => {
+export const DeveloperDashboard: FC<DeveloperDashboardProps> = ({ isOpen, onClose }) => {
   const [prompts, setPrompts] = useState(() => getAllPrompts());
-  const [showSuccess, setShowSuccess] = useState(false);
+  const { addNotification } = useNotification();
 
   useEffect(() => {
     if (isOpen) {
@@ -50,10 +52,7 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ isOpen, 
 
   const handleSavePrompts = () => {
     saveAllPrompts(prompts);
-    setShowSuccess(true);
-    setTimeout(() => {
-      setShowSuccess(false);
-    }, 2000);
+    addNotification('Todos os prompts foram salvos com sucesso!', 'success');
   };
 
   const handleResetPrompts = () => {
@@ -61,8 +60,8 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ isOpen, 
     if (isConfirmed) {
       resetPrompts();
       setPrompts(DEFAULT_PROMPTS);
-      alert('Prompts redefinidos para os padrões. A página será recarregada para aplicar as alterações.');
-      window.location.reload();
+      addNotification('Prompts redefinidos. A página será recarregada.', 'info');
+      setTimeout(() => window.location.reload(), 2000);
     }
   };
 
@@ -71,6 +70,7 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ isOpen, 
     const labelB = promptLabels[b] || b;
     const numA = parseInt(labelA.split('.')[0], 10);
     const numB = parseInt(labelB.split('.')[0], 10);
+    if (isNaN(numA) || isNaN(numB)) return labelA.localeCompare(labelB);
     return numA - numB;
   });
 
@@ -126,7 +126,6 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ isOpen, 
             Redefinir Prompts
           </button>
           <div className="flex items-center gap-4">
-            {showSuccess && <span className="text-sm text-green-400">Salvo com sucesso!</span>}
             <button onClick={onClose} className="px-4 py-2 text-sm font-bold text-slate-300 bg-slate-700 rounded-lg hover:bg-slate-600 transition-colors">
                 Fechar
             </button>

@@ -1,11 +1,11 @@
-import React from 'react';
-import type { CustomerProfile } from '../types';
+import React, { FC } from 'react';
+import type { CustomerProfile } from '../types.ts';
 
 interface CustomerProfileDisplayProps {
   result: CustomerProfile;
 }
 
-const DonutChart: React.FC<{ data: { label: string; value: number; color: string }[] }> = ({ data }) => {
+const DonutChart: FC<{ data: { label: string; value: number; color: string }[] }> = ({ data }) => {
     const size = 200;
     const strokeWidth = 25;
     const radius = (size - strokeWidth) / 2;
@@ -38,7 +38,7 @@ const DonutChart: React.FC<{ data: { label: string; value: number; color: string
                 dominantBaseline="middle"
                 textAnchor="middle"
                 className="transform rotate-90"
-                style={{ fontSize: '14px', fill: '#334155', fontWeight: 'bold' }}
+                style={{ fontSize: '14px', fill: 'var(--text-color, #334155)', fontWeight: 'bold' }}
               >
                 Gênero
             </text>
@@ -47,7 +47,16 @@ const DonutChart: React.FC<{ data: { label: string; value: number; color: string
 };
 
 
-export const CustomerProfileDisplay: React.FC<CustomerProfileDisplayProps> = ({ result }) => {
+export const CustomerProfileDisplay: FC<CustomerProfileDisplayProps> = ({ result }) => {
+    if (!result || !result.genderDistribution || !Array.isArray(result.mainInterests)) {
+      return (
+        <div className="p-6 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200 border-b dark:border-slate-700 pb-3 mb-6">Análise de Perfil de Cliente (Estimativa)</h2>
+          <p className="text-slate-500 dark:text-slate-400">Não foi possível carregar o perfil do cliente. Tente novamente mais tarde.</p>
+        </div>
+      );
+    }
+
     const { genderDistribution, ageRange, mainInterests, summary } = result;
 
     const chartData = [
@@ -58,18 +67,23 @@ export const CustomerProfileDisplay: React.FC<CustomerProfileDisplayProps> = ({ 
 
   return (
     <div className="space-y-8">
+      <style>{`
+          #customer-profile-chart text {
+              fill: ${document.documentElement.classList.contains('dark') ? '#cbd5e1' : '#334155'};
+          }
+      `}</style>
       <div>
-        <h2 className="text-2xl font-bold text-slate-800 border-b pb-3 mb-6">Análise de Perfil de Cliente (Estimativa)</h2>
-        <p className="text-slate-600 mb-6">
+        <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200 border-b dark:border-slate-700 pb-3 mb-6">Análise de Perfil de Cliente (Estimativa)</h2>
+        <p className="text-slate-600 dark:text-slate-400 mb-6">
             Com base nas informações públicas da empresa, a IA estimou o perfil do seu público-alvo. Use estes insights para direcionar suas estratégias de marketing e comunicação.
         </p>
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-            <div className="lg:col-span-2 bg-white p-6 rounded-lg border border-slate-200 flex flex-col items-center justify-center">
-                <h3 className="text-lg font-semibold text-slate-700 mb-4">Distribuição por Gênero</h3>
+            <div id="customer-profile-chart" className="lg:col-span-2 bg-white dark:bg-slate-800/50 p-6 rounded-lg border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center">
+                <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-4">Distribuição por Gênero</h3>
                 <DonutChart data={chartData} />
                 <div className="flex justify-center flex-wrap gap-4 mt-4">
                     {chartData.map(item => (
-                        <div key={item.label} className="flex items-center gap-2 text-sm">
+                        <div key={item.label} className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
                             <span className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }}></span>
                             <span>{item.label}: <span className="font-bold">{item.value}%</span></span>
                         </div>
@@ -77,23 +91,23 @@ export const CustomerProfileDisplay: React.FC<CustomerProfileDisplayProps> = ({ 
                 </div>
             </div>
             <div className="lg:col-span-3 space-y-6">
-                <div className="bg-white p-6 rounded-lg border border-slate-200">
-                     <h3 className="text-lg font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                <div className="bg-white dark:bg-slate-800/50 p-6 rounded-lg border border-slate-200 dark:border-slate-700">
+                     <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-[#EA4335]"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>
                         Análise do Perfil
                     </h3>
-                    <p className="text-slate-600">{summary}</p>
+                    <p className="text-slate-600 dark:text-slate-400">{summary}</p>
                 </div>
                 <div className="grid grid-cols-2 gap-6">
-                    <div className="bg-white p-6 rounded-lg border border-slate-200">
-                        <h4 className="font-bold text-slate-600 mb-2">Faixa Etária</h4>
+                    <div className="bg-white dark:bg-slate-800/50 p-6 rounded-lg border border-slate-200 dark:border-slate-700">
+                        <h4 className="font-bold text-slate-600 dark:text-slate-400 mb-2">Faixa Etária</h4>
                         <p className="text-3xl font-extrabold text-[#4285F4]">{ageRange}</p>
                     </div>
-                    <div className="bg-white p-6 rounded-lg border border-slate-200">
-                        <h4 className="font-bold text-slate-600 mb-2">Principais Interesses</h4>
+                    <div className="bg-white dark:bg-slate-800/50 p-6 rounded-lg border border-slate-200 dark:border-slate-700">
+                        <h4 className="font-bold text-slate-600 dark:text-slate-400 mb-2">Principais Interesses</h4>
                         <div className="flex flex-wrap gap-2">
                             {mainInterests.map((interest, index) => (
-                                <span key={index} className="bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-0.5 rounded-full">{interest}</span>
+                                <span key={index} className="bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300 text-xs font-semibold px-2.5 py-0.5 rounded-full">{interest}</span>
                             ))}
                         </div>
                     </div>

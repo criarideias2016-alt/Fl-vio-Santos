@@ -1,35 +1,42 @@
-import React from 'react';
-import type { SeoActionsResult, SeoAction } from '../types';
+import React, { ReactNode, FC } from 'react';
+import type { SeoActionsResult, SeoAction } from '../types.ts';
 
 interface SeoActionsDisplayProps {
   result: SeoActionsResult;
 }
 
-const priorityStyles = {
+type PriorityStyle = {
+  icon: ReactNode;
+  color: string;
+  bgColor: string;
+  label: string;
+};
+
+const priorityStyles: Record<SeoAction['priority'], PriorityStyle> = {
     Alta: {
         icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0112 21 8.25 8.25 0 016.038 7.048 8.287 8.287 0 009 9.6a8.983 8.983 0 013.362-3.797A8.33 8.33 0 0112 5.25c1.453 0 2.848.311 4.138.862a8.25 8.25 0 00-1.42 2.1z" /></svg>,
-        color: 'text-red-700',
-        bgColor: 'bg-red-100',
+        color: 'text-red-700 dark:text-red-300',
+        bgColor: 'bg-red-100 dark:bg-red-900/50',
         label: 'Alta Prioridade'
     },
     Média: {
         icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126z" /></svg>,
-        color: 'text-yellow-700',
-        bgColor: 'bg-yellow-100',
+        color: 'text-yellow-700 dark:text-yellow-300',
+        bgColor: 'bg-yellow-100 dark:bg-yellow-900/50',
         label: 'Média Prioridade'
     },
     Baixa: {
         icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>,
-        color: 'text-blue-700',
-        bgColor: 'bg-blue-100',
+        color: 'text-blue-700 dark:text-blue-300',
+        bgColor: 'bg-blue-100 dark:bg-blue-900/50',
         label: 'Baixa Prioridade'
     }
 };
 
-const ActionCard: React.FC<{ action: SeoAction }> = ({ action }) => {
+const ActionCard: FC<{ action: SeoAction }> = ({ action }) => {
     const style = priorityStyles[action.priority] || priorityStyles['Baixa'];
     return (
-      <div className="bg-white border border-gray-200 rounded-lg p-5 transition-all duration-300 hover:border-blue-300 hover:shadow-md">
+      <div className="bg-white dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700 rounded-lg p-5 transition-all duration-300 hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-md">
         <div className="flex items-start gap-4">
           <div className={`p-2 rounded-full ${style.bgColor} ${style.color}`}>
             {style.icon}
@@ -38,15 +45,24 @@ const ActionCard: React.FC<{ action: SeoAction }> = ({ action }) => {
             <span className={`text-sm font-medium px-2 py-0.5 rounded-full ${style.bgColor} ${style.color}`}>
               {style.label}
             </span>
-            <h3 className="text-lg font-bold text-gray-800 mt-2">{action.title}</h3>
-            <p className="text-gray-600 mt-1">{action.description}</p>
+            <h3 className="text-lg font-bold text-gray-800 dark:text-slate-200 mt-2">{action.title}</h3>
+            <p className="text-gray-600 dark:text-slate-400 mt-1">{action.description}</p>
           </div>
         </div>
       </div>
     );
 };
 
-export const SeoActionsDisplay: React.FC<SeoActionsDisplayProps> = ({ result }) => {
+export const SeoActionsDisplay: FC<SeoActionsDisplayProps> = ({ result }) => {
+    if (!result || !Array.isArray(result.actions)) {
+      return (
+        <div className="p-6 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200 border-b dark:border-slate-700 pb-3 mb-6">Plano de Ação para Otimização (SEO)</h2>
+          <p className="text-slate-500 dark:text-slate-400">Não foi possível carregar o plano de ação. Tente novamente mais tarde.</p>
+        </div>
+      );
+    }
+    
     const sortedActions = [...result.actions].sort((a, b) => {
         const priorityOrder = { 'Alta': 1, 'Média': 2, 'Baixa': 3 };
         return priorityOrder[a.priority] - priorityOrder[b.priority];
@@ -55,8 +71,8 @@ export const SeoActionsDisplay: React.FC<SeoActionsDisplayProps> = ({ result }) 
     return (
         <div className="space-y-8">
             <div>
-                <h2 className="text-2xl font-bold text-slate-800 border-b pb-3 mb-6">Plano de Ação para Otimização (SEO)</h2>
-                <p className="text-gray-600 mb-6">Siga estas ações estratégicas para melhorar seu posicionamento e superar seus concorrentes locais.</p>
+                <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-200 border-b dark:border-slate-700 pb-3 mb-6">Plano de Ação para Otimização (SEO)</h2>
+                <p className="text-gray-600 dark:text-slate-400 mb-6">Siga estas ações estratégicas para melhorar seu posicionamento e superar seus concorrentes locais.</p>
                 <div className="space-y-4">
                     {sortedActions.map((action, index) => (
                         <ActionCard key={index} action={action} />

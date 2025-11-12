@@ -1,8 +1,9 @@
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
-import { AuthProvider } from './contexts/AuthContext';
+import App from './App.tsx';
+import { ThemeProvider } from './contexts/ThemeContext.tsx';
+import { NotificationProvider } from './contexts/NotificationContext.tsx';
+import { ApiKeyProvider } from './contexts/ApiKeyContext.tsx';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -24,8 +25,12 @@ if ('serviceWorker' in navigator) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <AuthProvider>
-      <App />
-    </AuthProvider>
+    <ThemeProvider>
+      <NotificationProvider>
+        <ApiKeyProvider>
+          <App />
+        </ApiKeyProvider>
+      </NotificationProvider>
+    </ThemeProvider>
   </React.StrictMode>
 );

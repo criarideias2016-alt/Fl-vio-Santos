@@ -1,4 +1,11 @@
+// New type for Notification System
+export interface Notification {
+  id: number;
+  message: string;
+  type: 'success' | 'error' | 'info';
+}
 
+// Gemini Service related types
 export interface Suggestion {
   title: string;
   description: string;
@@ -7,13 +14,6 @@ export interface Suggestion {
 
 export interface AnalysisResult {
   suggestions: Suggestion[];
-}
-
-export interface GroundingChunk {
-  maps: {
-    title: string;
-    uri: string;
-  };
 }
 
 export interface Competitor {
@@ -28,10 +28,22 @@ export interface CompetitiveAnalysis {
   analysis: Competitor[];
 }
 
+export interface LocalRankingResult {
+  ranking: string;
+  justification: string;
+}
+
+export interface PostSuggestion {
+  title: string;
+  content: string;
+}
+
 export interface KeywordsResult {
   principais: string[];
   caudaLonga: string[];
   locais: string[];
+  hashtags: string[];
+  posts: PostSuggestion[];
 }
 
 export interface ResponseTemplate {
@@ -54,13 +66,8 @@ export interface SeoActionsResult {
     actions: SeoAction[];
 }
 
-export interface NeighborhoodInterest {
-    name: string;
-    interestScore: number;
-}
-
 export interface RadiusAnalysisResult {
-    neighborhoods: NeighborhoodInterest[];
+    neighborhoods: { name: string; interestScore: number }[];
     analysisSummary: string;
 }
 
@@ -70,19 +77,12 @@ export interface Idea {
     category: 'Postagens' | 'Promoções' | 'Eventos';
 }
 
-export interface Photo360Advice {
-    title: string;
-    description: string;
-}
-
 export interface IdeasResult {
     ideas: Idea[];
-    photo360: Photo360Advice;
-}
-
-export interface LocalRankingResult {
-    ranking: string;
-    justification: string;
+    photo360: {
+        title: string;
+        description: string;
+    };
 }
 
 export interface ScorecardMetric {
@@ -107,80 +107,56 @@ export interface OptimizationBenefits {
     benefits: BenefitItem[];
 }
 
-export interface ComparisonMetric {
-    metric: string;
-    yourBusiness: string;
-    competitor: string;
-}
-
 export interface HeadToHeadAnalysis {
     competitorName: string;
-    comparison: ComparisonMetric[];
+    comparison: {
+        metric: string;
+        yourBusiness: string;
+        competitor: string;
+    }[];
     strategicRecommendations: string[];
 }
 
-export interface GenderDistribution {
-    male: number;
-    female: number;
-    other: number;
-}
-
 export interface CustomerProfile {
-    genderDistribution: GenderDistribution;
+    genderDistribution: {
+        male: number;
+        female: number;
+        other: number;
+    };
     ageRange: string;
     mainInterests: string[];
     summary: string;
 }
 
 export interface SentimentTheme {
-  theme: string;
-  summary: string;
-  mentions: number;
+    theme: string;
+    summary: string;
+    mentions: number;
 }
 
 export interface SentimentAnalysis {
-  positiveThemes: SentimentTheme[];
-  negativeThemes: SentimentTheme[];
-}
-
-export interface MonthlyVolume {
-    month: string;
-    volume: number;
+    positiveThemes: SentimentTheme[];
+    negativeThemes: SentimentTheme[];
 }
 
 export interface KeywordVolumeResult {
     keyword: string;
-    monthlyVolumes: MonthlyVolume[];
+    monthlyVolumes: { month: string; volume: number }[];
     analysis: string;
 }
 
-// New types for Auth & Subscription
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  role: 'user' | 'admin';
+export interface GrowthProjection {
+    analysis: string;
+    projection: { month: string; projectedScore: number }[];
 }
 
-export interface Subscription {
-  status: 'active' | 'pending' | 'expired' | 'inactive';
-  startDate: string | null;
-  endDate: string | null;
-  paymentId: string | null;
-}
-
-// New types for Admin Dashboard
-export interface AdminUser extends User {
-  subscription: Subscription;
-  createdAt: string;
-}
-
-export interface AdminPayment {
-  id: string;
-  userId: string;
-  userEmail: string;
-  amount: number;
-  method: 'Cartão de crédito' | 'Pix' | 'Boleto';
-  status: 'Pago' | 'Pendente' | 'Expirado';
-  paidDate: string;
+export interface GroundingChunk {
+    maps?: {
+        uri: string;
+        title: string;
+    };
+    web?: {
+        uri: string;
+        title: string;
+    };
 }
